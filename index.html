@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>lucky的鱼塘 · 垂钓</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="gl"></canvas>
+
+  <div id="lineLayer"></div>
+  <div id="bobber"><div class="tip"></div><div class="body"></div></div>
+
+  <header id="topBar" class="hud">
+    <div class="brand">lucky的鱼塘</div>
+    <div class="zen" title="静心：不疾不徐，鱼更愿意亲近">
+      <span class="zen-label">静心</span>
+      <div class="zen-track"><div id="zenFill" class="zen-fill"></div></div>
+      <span id="zenVal" class="zen-val">50</span>
+    </div>
+    <button id="journalBtn" class="icon-btn" title="图鉴">鱼</button>
+    <button id="helpBtn" class="icon-btn" title="玩法">？</button>
+  </header>
+
+  <div id="hint">轻触水面抛竿 · 试探时请耐心</div>
+  <div id="toast"></div>
+
+  <div id="bottomBar" class="hud">
+    <div id="tensionWrap">
+      <div class="tension-head">
+        <strong>手感</strong>
+        <span id="tensionHint">按住收线</span>
+      </div>
+      <div class="tension-track"><div id="tensionFill"></div></div>
+    </div>
+    <div id="baitBar"></div>
+    <button id="actionBtn" class="action ghost">点水面抛竿</button>
+  </div>
+
+  <div id="catchCard" class="card">
+    <div id="cardArt"></div>
+    <div id="cardRarity">寻常</div>
+    <h1 id="cardName">鲫鱼</h1>
+    <div id="cardMeta"></div>
+    <div id="cardPoem"></div>
+    <div class="card-actions">
+      <button id="btnRelease">放流</button>
+      <button id="btnKeep">收进篓篓</button>
+    </div>
+  </div>
+
+  <div id="journal">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>鱼鉴</h2>
+          <div id="journalStats" class="sub"></div>
+        </div>
+        <button id="journalClose" class="close-x">×</button>
+      </div>
+      <div id="journalGrid"></div>
+    </div>
+  </div>
+
+  <div id="help">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>如何垂钓</h2>
+        <button id="helpClose" class="close-x">×</button>
+      </div>
+      <p>这是一座只求慢的池塘。不必争抢，鱼来了，便接住。</p>
+      <ul>
+        <li>轻触水面抛竿；等待时浮漂会安静。</li>
+        <li>水下若有点水声，是鱼在试探——<b>先别提</b>，等它真正咬钩。</li>
+        <li>咬钩时浮漂下沉，立刻扬竿（点水面 / 空格 / 按钮）。</li>
+        <li>遛鱼时按住收线，松手歇力；张力停在绿色区最省心。</li>
+        <li>靠近荷花抛竿，花运更好；静心越高，奇鱼越易现。</li>
+        <li>放流积静心；收入图鉴可回看渔获小诗。</li>
+      </ul>
+      <p>饵：红虫引小物，玉米诱肥鱼，花瓣饵结奇缘。</p>
+    </div>
+  </div>
+
+  <script src="js/bg-data.js"></script>
+  <script src="js/water.js"></script>
+  <script src="js/life.js"></script>
+  <script src="js/fishing.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
