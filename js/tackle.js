@@ -23,17 +23,16 @@
         </linearGradient>
       </defs>
       <!-- 竿体（弯折用 path） -->
-      <path id="rodPath" fill="none" stroke="url(#rodGrad)" stroke-width="7" stroke-linecap="round"/>
-      <path id="rodShine" fill="none" stroke="rgba(255,240,210,.35)" stroke-width="1.4" stroke-linecap="round"/>
+      <path id="rodShadow" fill="none" stroke="rgba(30,70,90,.14)" stroke-width="11" stroke-linecap="round"/>
+      <path id="rodPath" fill="none" stroke="url(#rodGrad)" stroke-width="8" stroke-linecap="round"/>
+      <path id="rodShine" fill="none" stroke="rgba(255,240,210,.4)" stroke-width="1.6" stroke-linecap="round"/>
       <!-- 握把 -->
-      <path id="rodGrip" fill="none" stroke="url(#gripGrad)" stroke-width="11" stroke-linecap="round"/>
+      <path id="rodGrip" fill="none" stroke="url(#gripGrad)" stroke-width="12" stroke-linecap="round"/>
       <!-- 导环 -->
-      <circle id="guide1" r="3.2" fill="none" stroke="#c9a45a" stroke-width="1.4"/>
-      <circle id="guide2" r="2.4" fill="none" stroke="#c9a45a" stroke-width="1.2"/>
+      <circle id="guide1" r="3.4" fill="none" stroke="#d4b880" stroke-width="1.5"/>
+      <circle id="guide2" r="2.6" fill="none" stroke="#d4b880" stroke-width="1.3"/>
       <!-- 钓线 -->
-      <path id="linePath" fill="none" stroke="rgba(250,246,236,.82)" stroke-width="1.15" stroke-linecap="round"/>
-      <!-- 竿影 -->
-      <path id="rodShadow" fill="none" stroke="rgba(30,70,90,.12)" stroke-width="9" stroke-linecap="round"/>
+      <path id="linePath" fill="none" stroke="rgba(250,246,236,.86)" stroke-width="1.2" stroke-linecap="round"/>
     </svg>`;
 
   const rodPath = document.getElementById("rodPath");

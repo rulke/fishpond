@@ -119,15 +119,19 @@
     persist();
     const filled = Math.round((v / 100) * 5);
     let petals = "";
+    // 五瓣莲苞：外瓣张开、内瓣收拢
     for (let i = 0; i < 5; i++) {
       const on = i < filled;
-      const rot = (i - 2) * 28;
-      petals += `<ellipse cx="24" cy="12" rx="5" ry="10" transform="rotate(${rot} 24 18)"
-        fill="${on ? "#d48aa0" : "rgba(42,69,84,.12)"}" stroke="${on ? "#c47a90" : "rgba(42,69,84,.1)"}" stroke-width=".6"/>`;
+      const rot = (i - 2) * 36;
+      const r = on ? 1.05 : 0.92;
+      petals += `<path d="M24 20 C18 14 18 6 24 2 C30 6 30 14 24 20 Z"
+        transform="rotate(${rot} 24 20) scale(${r}) translate(${(1 - r) * 24 / r} ${(1 - r) * 20 / r})"
+        fill="${on ? "#e8a8b8" : "rgba(42,69,84,.10)"}"
+        stroke="${on ? "#d48aa0" : "rgba(42,69,84,.12)"}" stroke-width=".7"/>`;
     }
     const core = v >= 95
-      ? `<circle cx="24" cy="18" r="3.2" fill="#c9a45a"/>`
-      : `<circle cx="24" cy="18" r="2.6" fill="${filled > 2 ? "#e0c88a" : "rgba(42,69,84,.15)"}"/>`;
+      ? `<circle cx="24" cy="19" r="3" fill="#c9a45a"/>`
+      : `<circle cx="24" cy="19" r="2.4" fill="${filled > 2 ? "#e8d4a0" : "rgba(42,69,84,.16)"}"/>`;
     els.zenLotus.innerHTML = petals + core;
   }
 
