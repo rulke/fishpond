@@ -179,6 +179,16 @@
     return Math.max(2.5, base);
   }
 
+  // 甜区：能量落在 [sweetStart, sweetStart+0.12] 更准（app 在 cast 后读 grade）
+  function gradeCast(pow) {
+    const raw = localStorage.getItem("fishpond_sweet");
+    const start = raw != null ? Number(raw) : 0.42;
+    const s = Number.isFinite(start) ? start : 0.42;
+    if (pow >= s && pow <= s + 0.12) return "sweet";
+    const mid = s + 0.06;
+    return Math.abs(pow - mid) > 0.22 ? "poor" : "ok";
+  }
+
   // 按当前方向/能量抛竿
   function cast(dir, pow) {
     if (st.state !== S.IDLE && st.state !== S.CAUGHT) return false;
@@ -187,6 +197,7 @@
     if (dir != null) st.castDir = Math.max(0, Math.min(1, dir));
     if (pow != null) st.castPow = Math.max(0.18, Math.min(1, pow));
     const aim = aimToXY(st.castDir, st.castPow);
+    const grade = gradeCast(st.castPow);
     st.lastCastAt = now;
     st.lineX = aim.x;
     st.lineY = aim.y;
@@ -197,15 +208,17 @@
     st.tension = 0.35;
     st.fightProgress = 0;
     st.pendingFish = null;
-    zenAdd(-1);
-    if (window.Water) Water.addDrop(aim.x, aim.y, 18 + st.castPow * 16, 0.7 + st.castPow * 0.5);
+    st.castGrade = grade;
+    zenAdd(grade === "sweet" ? 0 : -1);
+    const splash = grade === "sweet" ? 0.55 : grade === "poor" ? 1.0 : 0.75;
+    if (window.Water) Water.addDrop(aim.x, aim.y, (18 + st.castPow * 16) * splash, (0.7 + st.castPow * 0.5) * splash);
     if (window.Life) Life.startleKoi(aim.x, aim.y);
-    emit("cast", { x: aim.x, y: aim.y, pow: st.castPow });
+    emit("cast", { x: aim.x, y: aim.y, pow: st.castPow, grade });
     setTimeout(() => {
       if (st.state !== S.CASTING) return;
       st.state = S.WAITING;
       st.waitTimer = waitDuration();
-      if (window.Life) Life.attractKoi(st.lineX, st.lineY, 0.35);
+      if (window.Life) Life.attractKoi(st.lineX, st.lineY, grade === "sweet" ? 0.55 : 0.35);
       emit("waiting", {});
     }, 420);
     return true;

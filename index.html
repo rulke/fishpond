@@ -10,18 +10,21 @@
   <canvas id="gl"></canvas>
 
   <div id="lineLayer"></div>
-  <div id="bobber">
-    <div class="tip"></div>
-    <div class="body"></div>
+  <div id="bobber" class="float">
+    <div class="float-tip"></div>
+    <div class="float-body"></div>
+    <div class="float-foot"></div>
+    <div class="float-refl"></div>
     <div id="hookBait" class="hook-bait"></div>
   </div>
   <div id="castGhost" class="cast-ghost"></div>
 
+  <div id="mistBand" aria-hidden="true"></div>
   <header id="topBar" class="hud">
     <div class="brand">lucky的鱼塘</div>
-    <div class="zen" title="静心：不疾不徐，鱼更愿意亲近">
+    <div class="zen" title="静心">
       <span class="zen-label">静心</span>
-      <div class="zen-track"><div id="zenFill" class="zen-fill"></div></div>
+      <svg id="zenLotus" class="zen-lotus" viewBox="0 0 48 28" aria-hidden="true"></svg>
     </div>
     <div class="top-links">
       <button id="journalBtn" class="text-btn">图鉴</button>
@@ -33,33 +36,38 @@
   <div id="toast"></div>
 
   <div id="dock" class="hud">
-    <!-- 钓饵 -->
     <div class="bait-row">
       <span class="bait-preview" id="baitPreview"></span>
       <div id="baitBar" class="bait-bar"></div>
     </div>
 
-    <!-- 抛竿：方向 + 能量滑轮 -->
-    <div id="castPanel">
+    <div id="castPanel" class="panel-wood">
+      <!-- 竹尺 · 方向 -->
       <div class="roller-row">
         <span class="roller-label">方向</span>
-        <div class="roller" id="dirRoller" data-role="dir">
-          <div class="roller-track"><div class="roller-fill"></div></div>
-          <div class="roller-thumb" id="dirThumb"></div>
+        <div class="roller ruler" id="dirRoller" data-role="dir">
+          <div class="ruler-wood"></div>
+          <div class="ruler-marks"></div>
+          <div class="ruler-fill"></div>
+          <div class="roller-thumb wood-thumb" id="dirThumb"></div>
         </div>
       </div>
+      <!-- 木轮 · 能量（含甜区） -->
       <div class="roller-row">
         <span class="roller-label">能量</span>
-        <div class="roller" id="powRoller" data-role="pow">
-          <div class="roller-track"><div class="roller-fill" id="powFill"></div></div>
-          <div class="roller-thumb" id="powThumb"></div>
+        <div class="roller spool" id="powRoller" data-role="pow">
+          <div class="spool-frame"></div>
+          <div class="spool-track"><div class="spool-line" id="powFill"></div><div class="sweet-zone" id="sweetZone"></div></div>
+          <div class="roller-thumb wood-thumb" id="powThumb"></div>
         </div>
       </div>
-      <button id="castBtn" class="cast-btn">抛竿</button>
+      <button id="castBtn" class="cast-handle" title="抛竿">
+        <span class="handle-wind"></span>
+        <span class="handle-text">抛竿</span>
+      </button>
     </div>
 
-    <!-- 遛鱼张力 -->
-    <div id="tensionWrap">
+    <div id="tensionWrap" class="panel-wood">
       <div class="tension-head">
         <span>手感</span>
         <span id="tensionHint">按住收线</span>
@@ -67,19 +75,21 @@
       <div class="tension-track" id="tensionPad"><div id="tensionFill"></div></div>
     </div>
 
-    <!-- 等待/咬钩时的主操作 -->
     <button id="actionBtn" class="action-btn" hidden></button>
   </div>
 
   <div id="catchCard" class="card">
-    <div id="cardArt"></div>
-    <div id="cardRarity">寻常</div>
+    <div id="cardArt">
+      <div class="card-paper"></div>
+      <svg id="cardFish" class="card-fish" viewBox="0 0 120 56" aria-hidden="true"></svg>
+    </div>
+    <div class="card-stamp" id="cardRarity">寻常</div>
     <h1 id="cardName">鲫鱼</h1>
     <div id="cardMeta"></div>
     <div id="cardPoem"></div>
     <div class="card-actions">
-      <button id="btnRelease">放流</button>
-      <button id="btnKeep">收进篓篓</button>
+      <button id="btnRelease" class="btn-ink">放流</button>
+      <button id="btnKeep" class="btn-wood">收进篓篓</button>
     </div>
   </div>
 
@@ -104,13 +114,12 @@
       </div>
       <p>一座只求慢的池塘。不必争抢，鱼来了，便接住。</p>
       <ul>
-        <li>拖动<b>方向</b>滑轮选落点，拖动<b>能量</b>滑轮定远近，再按抛竿。</li>
-        <li>等待时浮漂会安静；水下试探要<b>忍住</b>，咬钩再扬竿。</li>
+        <li>拨<b>竹尺</b>定方向，拨<b>卷线轮</b>蓄远近；落进亮环是「顺风一抛」。</li>
+        <li>等待时浮漂会安静；试探只轻点，<b>真口</b>再扬竿。</li>
         <li>咬钩后按住收线，过紧就松一松；绿色带最省心。</li>
         <li>荷花近旁花运更好；静心越高，奇鱼越易现。</li>
-        <li>放流积静心；收进篓篓记斤两，图鉴可回看小诗。</li>
+        <li>放流积静心；收进篓篓记斤两。</li>
       </ul>
-      <p>饵会挂在钩上——红虫引小物，玉米诱肥鱼，花瓣饵结奇缘。</p>
     </div>
   </div>
 
@@ -118,6 +127,7 @@
   <script src="js/water.js"></script>
   <script src="js/life.js"></script>
   <script src="js/fishing.js"></script>
+  <script src="js/tackle.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -12,6 +12,7 @@
 | `js/water.js` | WebGL 水面模拟与折射渲染，导出 `Water` |
 | `js/life.js` | 荷花 / 浮叶 / 花瓣 / 锦鲤群，导出 `Life` |
 | `js/fishing.js` | 钓鱼状态机、张力、鱼种表，导出 `Fishing` |
+| `js/tackle.js` | 竿/线/漂/钩饵绘制与动画，导出 `Tackle` |
 | `js/app.js` | 组装、输入路由、HUD/图鉴 UI、存档 |
 | `flash1.png` | 水面折射底图（原图） |
 | `fish.png` | 渔获卡水彩底图 |

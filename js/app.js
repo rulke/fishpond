@@ -1,4 +1,4 @@
-/* UI 组装：能量滑轮抛竿、饵形切换、HUD、图鉴。导出 App */
+/* UI 组装：器物抛竿坞、莲苞静心、渔获卡、图鉴。导出 App */
 (function () {
   "use strict";
 
@@ -6,14 +6,13 @@
   const $ = (id) => document.getElementById(id);
 
   const els = {
-    zenFill: $("zenFill"),
     baitBar: $("baitBar"),
     baitPreview: $("baitPreview"),
-    hookBait: $("hookBait"),
     hint: $("hint"),
     toast: $("toast"),
     card: $("catchCard"),
     cardArt: $("cardArt"),
+    cardFish: $("cardFish"),
     cardName: $("cardName"),
     cardMeta: $("cardMeta"),
     cardPoem: $("cardPoem"),
@@ -25,12 +24,11 @@
     journalGrid: $("journalGrid"),
     journalClose: $("journalClose"),
     journalStats: $("journalStats"),
+    zenLotus: $("zenLotus"),
     tensionWrap: $("tensionWrap"),
     tensionFill: $("tensionFill"),
     tensionHint: $("tensionHint"),
     tensionPad: $("tensionPad"),
-    lineLayer: $("lineLayer"),
-    bobber: $("bobber"),
     actionBtn: $("actionBtn"),
     helpBtn: $("helpBtn"),
     help: $("help"),
@@ -43,20 +41,31 @@
     powRoller: $("powRoller"),
     powThumb: $("powThumb"),
     powFill: $("powFill"),
+    sweetZone: $("sweetZone"),
   };
 
   const save = loadSave();
   let castDir = 0.5;
   let castPow = 0.55;
+  let sweetStart = 0.42;
+  const SWEET_W = 0.12;
+
   try {
     const rawDir = localStorage.getItem("fishpond_dir");
     const rawPow = localStorage.getItem("fishpond_pow");
-    // Number(null)===0，缺键时必须回落默认
+    const rawSweet = localStorage.getItem("fishpond_sweet");
     if (rawDir != null && Number.isFinite(Number(rawDir))) castDir = Number(rawDir);
     if (rawPow != null && Number.isFinite(Number(rawPow))) castPow = Number(rawPow);
-  } catch (e) { /* ignore */ }
-  castDir = Math.max(0, Math.min(1, castDir));
+    if (rawSweet != null && Number.isFinite(Number(rawSweet))) sweetStart = Number(rawSweet);
+    else sweetStart = 0.12 + Math.random() * 0.72;
+  } catch (e) {
+    sweetStart = 0.12 + Math.random() * 0.72;
+  }
+  castDir = clamp01(castDir);
   castPow = Math.max(0.18, Math.min(1, castPow));
+  sweetStart = Math.max(0.05, Math.min(0.83, sweetStart));
+
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
   function loadSave() {
     try {
@@ -81,26 +90,48 @@
       localStorage.setItem(SAVE_KEY, JSON.stringify(save));
       localStorage.setItem("fishpond_dir", String(castDir));
       localStorage.setItem("fishpond_pow", String(castPow));
+      localStorage.setItem("fishpond_sweet", String(sweetStart));
     } catch (e) { /* 隐身模式忽略 */ }
+  }
+
+  function inSweet(p) {
+    return p >= sweetStart && p <= sweetStart + SWEET_W;
+  }
+
+  function rerollSweet() {
+    sweetStart = 0.1 + Math.random() * 0.74;
+    persist();
+    paintRollers();
   }
 
   /* ---------- toast ---------- */
   let toastTimer = 0;
-  function toast(text, ms = 2200) {
+  function toast(text, ms = 1600) {
     els.toast.textContent = text;
     els.toast.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => els.toast.classList.remove("show"), ms);
   }
 
-  /* ---------- zen ---------- */
+  /* ---------- zen lotus（5 瓣） ---------- */
   function paintZen(v) {
     save.zen = v;
-    els.zenFill.style.width = v + "%";
     persist();
+    const filled = Math.round((v / 100) * 5);
+    let petals = "";
+    for (let i = 0; i < 5; i++) {
+      const on = i < filled;
+      const rot = (i - 2) * 28;
+      petals += `<ellipse cx="24" cy="12" rx="5" ry="10" transform="rotate(${rot} 24 18)"
+        fill="${on ? "#d48aa0" : "rgba(42,69,84,.12)"}" stroke="${on ? "#c47a90" : "rgba(42,69,84,.1)"}" stroke-width=".6"/>`;
+    }
+    const core = v >= 95
+      ? `<circle cx="24" cy="18" r="3.2" fill="#c9a45a"/>`
+      : `<circle cx="24" cy="18" r="2.6" fill="${filled > 2 ? "#e0c88a" : "rgba(42,69,84,.15)"}"/>`;
+    els.zenLotus.innerHTML = petals + core;
   }
 
-  /* ---------- bait 形象（预览 + 钩上） ---------- */
+  /* ---------- bait ---------- */
   function baitSvgOf(id) {
     const b = Fishing.getBaits().find((x) => x.id === id);
     return b ? b.svg : "";
@@ -112,7 +143,7 @@
     persist();
     const svg = baitSvgOf(id);
     els.baitPreview.innerHTML = svg;
-    els.hookBait.innerHTML = svg;
+    if (window.Tackle) Tackle.setBait(svg);
     for (const el of els.baitBar.querySelectorAll(".bait-chip")) {
       el.classList.toggle("on", el.dataset.id === id);
     }
@@ -135,31 +166,38 @@
     paintBait(save.bait);
   }
 
-  /* ---------- energy rollers（方向 / 能量滑轮） ---------- */
-  function setRollerVisual() {
+  /* ---------- rollers ---------- */
+  function paintRollers() {
     els.dirThumb.style.left = (castDir * 100).toFixed(1) + "%";
-    const dFill = els.dirRoller.querySelector(".roller-fill");
+    const dFill = els.dirRoller.querySelector(".ruler-fill");
     if (dFill) dFill.style.width = (castDir * 100).toFixed(1) + "%";
     els.powThumb.style.left = (castPow * 100).toFixed(1) + "%";
     els.powFill.style.width = (castPow * 100).toFixed(1) + "%";
+    els.sweetZone.style.left = (sweetStart * 100).toFixed(1) + "%";
+    els.sweetZone.style.width = (SWEET_W * 100).toFixed(1) + "%";
   }
 
   function applyAim(showGhost) {
     Fishing.setCastAim(castDir, castPow);
-    setRollerVisual();
+    paintRollers();
     persist();
+    const sweet = inSweet(castPow);
     if (showGhost && Fishing.st.state === Fishing.S.IDLE) {
       const aim = Fishing.aimToXY(castDir, castPow);
       els.castGhost.style.opacity = "1";
       els.castGhost.style.transform = `translate(${aim.x}px, ${aim.y}px)`;
+      els.castGhost.classList.toggle("sweet", sweet);
+      els.sweetZone.classList.toggle("hit", sweet);
     } else {
       els.castGhost.style.opacity = "0";
+      els.castGhost.classList.remove("sweet");
+      els.sweetZone.classList.remove("hit");
     }
   }
 
   function rollerValueFromEvent(roller, e) {
     const r = roller.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width)));
+    return clamp01((e.clientX - r.left) / Math.max(1, r.width));
   }
 
   function bindRoller(roller, onVal) {
@@ -211,7 +249,7 @@
         <div class="j-name">${rec ? sp.name : "？？？"}</div>
         <div class="j-sub">${rec ? rec.count + " 尾 · " + rec.best + " kg" : rmeta.label}</div>
       `;
-      if (rec) cell.addEventListener("click", () => toast(`${sp.name}｜${sp.poem}`, 3200));
+      if (rec) cell.addEventListener("click", () => toast(`${sp.name}｜${sp.poem}`, 2800));
       els.journalGrid.appendChild(cell);
     }
     els.journalStats.textContent =
@@ -226,7 +264,38 @@
     els.journal.classList.remove("open");
   }
 
-  /* ---------- catch card ---------- */
+  /* ---------- catch card：剪影 + 斑纹 ---------- */
+  function paintCardFish(sp) {
+    const c1 = sp.colors[0], c2 = sp.colors[1];
+    const spots = (sp.id.length % 3) + 1;
+    let blobs = "";
+    for (let i = 0; i < spots; i++) {
+      const cx = 48 + i * 16 + (sp.id.charCodeAt(i % sp.id.length) % 8);
+      const cy = 24 + (i % 2) * 8;
+      blobs += `<ellipse cx="${cx}" cy="${cy}" rx="${7 + i * 1.5}" ry="${5 + i * 0.8}" fill="${c2}" opacity=".5"/>`;
+    }
+    // 圆润鱼身 + 叉尾 + 双鳍
+    els.cardFish.innerHTML = `
+      <defs>
+        <linearGradient id="cfG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${c1}"/>
+          <stop offset="100%" stop-color="${c2}"/>
+        </linearGradient>
+        <clipPath id="cfC">
+          <ellipse cx="62" cy="28" rx="34" ry="16"/>
+        </clipPath>
+      </defs>
+      <path d="M28 28 L10 14 C16 22 16 34 10 42 Z" fill="${c2}" opacity=".8"/>
+      <path d="M62 12 L54 4 L70 11 Z" fill="${c2}" opacity=".65"/>
+      <path d="M62 44 L54 52 L70 45 Z" fill="${c2}" opacity=".65"/>
+      <ellipse cx="62" cy="28" rx="34" ry="16" fill="url(#cfG)" stroke="${c2}" stroke-width="1"/>
+      <g clip-path="url(#cfC)">${blobs}</g>
+      <circle cx="84" cy="24" r="2.4" fill="#2a4554" opacity=".75"/>
+      <circle cx="84.7" cy="23.3" r="0.8" fill="#fff" opacity=".7"/>
+      <path d="M28 28 Q45 26 58 28" stroke="${c2}" stroke-width=".8" fill="none" opacity=".35"/>
+    `;
+  }
+
   function showCard(fish) {
     const sp = fish.sp;
     const rmeta = Fishing.getRarityMeta(sp.rarity);
@@ -235,8 +304,7 @@
     els.cardName.textContent = sp.name;
     els.cardMeta.textContent = `${fish.weight} kg · ${fish.size} cm · ${Fishing.st.bait.name}`;
     els.cardPoem.textContent = sp.poem;
-    els.cardArt.style.setProperty("--c1", sp.colors[0]);
-    els.cardArt.style.setProperty("--c2", sp.colors[1]);
+    paintCardFish(sp);
     els.card.classList.add("show");
   }
   function hideCard() {
@@ -260,60 +328,7 @@
     persist();
   }
 
-  /* ---------- line & bobber ---------- */
-  let bobberVisible = false;
-  function showBobber(x, y) {
-    els.bobber.style.transform = `translate(${x}px, ${y}px)`;
-    els.bobber.classList.add("show");
-    bobberVisible = true;
-  }
-  function hideBobber() {
-    els.bobber.classList.remove("show");
-    bobberVisible = false;
-    els.castGhost.style.opacity = "0";
-  }
-
-  function drawLine() {
-    const st = Fishing.st;
-    if (!bobberVisible && st.state !== Fishing.S.FIGHTING) {
-      els.lineLayer.innerHTML = "";
-      return;
-    }
-    const rx = st.rodX, ry = st.rodY;
-    const bx = st.lineX, by = st.lineY + (st.bobberDip || 0) * 8;
-    const gx = rx + 28, gy = ry + 40;
-    const cx = (rx + bx) / 2;
-    const cy = Math.min(ry, by) - 40 - Math.hypot(rx - bx, ry - by) * 0.08;
-    els.lineLayer.innerHTML = `
-      <svg width="100%" height="100%" style="position:absolute;inset:0">
-        <path d="M${gx} ${gy} Q ${rx + 8} ${ry + 8} ${rx} ${ry}" stroke="#6b5344" stroke-width="3.2" stroke-linecap="round" fill="none"/>
-        <path d="M${rx} ${ry} Q ${cx} ${cy} ${bx} ${by}" stroke="rgba(255,255,255,.72)" stroke-width="1.1" fill="none"/>
-      </svg>`;
-  }
-
-  function paintBobber(st) {
-    if (!bobberVisible) return;
-    const dip = st.bobberDip || 0;
-    els.bobber.style.transform = `translate(${st.lineX}px, ${st.lineY + dip * 10}px) scale(${1 - dip * 0.12})`;
-  }
-
-  /* ---------- tension ---------- */
-  function paintTension(st) {
-    const on = st.state === Fishing.S.FIGHTING;
-    els.tensionWrap.classList.toggle("show", on);
-    if (!on) return;
-    els.tensionFill.style.width = (st.tension * 100).toFixed(1) + "%";
-    const t = st.tension;
-    let hint = "按住收线，松手歇一下";
-    let cls = "mid";
-    if (t > 0.8) { hint = "线太紧了，松一下"; cls = "high"; }
-    else if (t < 0.2) { hint = "线松了，轻轻收一点"; cls = "low"; }
-    else if (t > 0.35 && t < 0.75) { hint = "手感刚刚好"; cls = "good"; }
-    els.tensionHint.textContent = hint;
-    els.tensionHint.className = cls;
-  }
-
-  /* ---------- panels visibility ---------- */
+  /* ---------- panels ---------- */
   function paintPanels(st) {
     const idle = st.state === Fishing.S.IDLE;
     els.castPanel.classList.toggle("show", idle);
@@ -331,12 +346,11 @@
     els.actionBtn.className =
       "action-btn " +
       (st.state === Fishing.S.BITE || st.state === Fishing.S.FIGHTING ? "urgent" :
-       st.state === Fishing.S.NIBBLE ? "wait" : "soft");
+       st.state === Fishing.S.NIBBLE ? "wait" : "");
   }
 
-  /* ---------- hint ---------- */
   const HINTS = {
-    idle: "拨方向与能量滑轮，按抛竿",
+    idle: "拨竹尺定方向，卷线轮蓄力，落进亮环更妙",
     waiting: "浮漂静了……",
     nibble: "水下试探，先别提",
     bite: "就是现在",
@@ -355,61 +369,77 @@
     switch (type) {
       case "bait":
         paintBait(data.bait);
-        if (!data.silent) toast(`换上${data.bait.name}`, 1500);
+        if (!data.silent) toast(`换上${data.bait.name}`, 1400);
         break;
       case "zen":
         paintZen(data.zen);
         break;
-      case "aim":
-        break;
-      case "cast":
-        showBobber(data.x, data.y);
+      case "cast": {
         setHint("waiting");
+        if (window.Tackle) {
+          const tip = { x: Fishing.st.rodX, y: Fishing.st.rodY };
+          Tackle.startFlight(tip, { x: data.x, y: data.y, dist: Math.hypot(data.x - tip.x, data.y - tip.y) });
+          Tackle.setBait(baitSvgOf(save.bait));
+        }
+        if (data.grade === "sweet") toast("顺风一抛", 1500);
+        else if (data.grade === "poor") toast("散了窝", 1200);
+        else toast("漂已落水", 1200);
         break;
+      }
       case "waiting":
         setHint("waiting");
+        if (window.Tackle) Tackle.setPhase("wait");
         break;
       case "nibble":
       case "nibbleTick":
         setHint("nibble");
-        if (type === "nibble") toast("水下有动静", 1200);
+        if (window.Tackle) Tackle.setPhase("wait");
         break;
       case "bite":
         setHint("bite");
         toast("咬钩", 1000);
+        if (window.Tackle) Tackle.setPhase("cast");
         break;
       case "fight":
         setHint("fight");
+        if (window.Tackle) Tackle.setPhase("fight", Fishing.st.tension);
         break;
       case "blank":
-        toast("空空如也");
+        toast("空空如也", 1100);
         break;
       case "escaped":
-        hideBobber();
+        if (window.Tackle) Tackle.hide();
         hideCard();
         setHint("idle");
-        toast(data.text || "游走了", 2000);
+        toast(data.text || "游走了", 1800);
+        rerollSweet();
         break;
       case "retract":
-        hideBobber();
+        if (window.Tackle) Tackle.hide();
         setHint("idle");
+        rerollSweet();
         break;
       case "caught":
-        showBobber(Fishing.st.lineX, Fishing.st.lineY);
+        if (window.Tackle) {
+          Tackle.show(Fishing.st.lineX, Fishing.st.lineY);
+          Tackle.setPhase("wait");
+        }
         showCard(data.fish);
         setHint("caught");
         break;
       case "kept":
-        hideBobber();
+        if (window.Tackle) Tackle.hide();
         hideCard();
         setHint("idle");
-        toast("收进篓篓", 1500);
+        toast("收进篓篓", 1400);
+        rerollSweet();
         break;
       case "released":
-        hideBobber();
+        if (window.Tackle) Tackle.hide();
         hideCard();
         setHint("idle");
-        toast("放归池中 · 静心 +5", 1600);
+        toast("放归池中 · 静心 +5", 1500);
+        rerollSweet();
         break;
       default:
         break;
@@ -442,7 +472,6 @@
       Fishing.retract();
       return;
     }
-    // IDLE：点水面仅起涟漪，抛竿走滑轮
     if (st.state === Fishing.S.IDLE && window.Water) {
       Water.addDrop(e.clientX, e.clientY, 8, 0.12);
     }
@@ -543,24 +572,27 @@
     if (e.code === "Space") Fishing.setReeling(false);
   });
 
-  /* ---------- boot ---------- */
+  /* ---------- boot / frame ---------- */
   function boot() {
     buildBaitBar();
     Fishing.setBait(save.bait || "worm", true);
     Fishing.st.zen = save.zen;
     paintZen(Fishing.st.zen);
     Fishing.setCastAim(castDir, castPow);
-    setRollerVisual();
     applyAim(true);
     setHint("idle");
     paintPanels(Fishing.st);
   }
 
-  function frame() {
+  function frame(now, dt) {
     const st = Fishing.st;
-    drawLine();
-    paintBobber(st);
-    paintTension(st);
+    if (window.Tackle) {
+      if (st.state === Fishing.S.FIGHTING) Tackle.setPhase("fight", st.tension);
+      if (window.Tackle) Tackle.setDip(st.bobberDip || 0);
+      // 未抛出时也画空闲竿
+      if (!Tackle.visible && st.state === Fishing.S.IDLE) Tackle.setPhase("idle");
+      Tackle.update(dt);
+    }
   }
 
   window.App = { boot, frame, toast };
