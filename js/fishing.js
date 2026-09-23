@@ -2,10 +2,43 @@
 (function () {
   "use strict";
 
+  // 矢量饵形：切换时钩上与预览都会换形象（不用 emoji，避免乱码）
   const BAITS = [
-    { id: "worm", name: "红虫", icon: "🪱", desc: "寻常小物也爱", tier: "common" },
-    { id: "corn", name: "玉米", icon: "🌽", desc: "肥鱼偏好", tier: "mid" },
-    { id: "petal", name: "花瓣饵", icon: "🌸", desc: "花运在侧更灵", tier: "rare" },
+    {
+      id: "worm",
+      name: "红虫",
+      desc: "寻常小物也爱",
+      tier: "common",
+      svg: `<svg viewBox="0 0 32 32" class="bait-svg" aria-hidden="true">
+        <path d="M9 27c1-5 3-8 7-11 3-2 5-6 6-10" fill="none" stroke="#c94a38" stroke-width="5" stroke-linecap="round"/>
+        <path d="M9 27c1-5 3-8 7-11 3-2 5-6 6-10" fill="none" stroke="#e87868" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M8.2 24.5h3.2M11.5 19.5h3.2M15 15.2h3M18 10.5h2.8" stroke="#9e3224" stroke-width="1.4" stroke-linecap="round" opacity=".65"/>
+      </svg>`,
+    },
+    {
+      id: "corn",
+      name: "玉米",
+      desc: "肥鱼偏好",
+      tier: "mid",
+      svg: `<svg viewBox="0 0 32 32" class="bait-svg" aria-hidden="true">
+        <ellipse cx="16" cy="18" rx="7.5" ry="10" fill="#f0d060"/>
+        <ellipse cx="16" cy="18" rx="7.5" ry="10" fill="none" stroke="#c4a03c" stroke-width="1.2"/>
+        <path d="M11.5 13.5q4.5 2 9 0 M11 18.5q5 2 10 0 M11.5 23q4.5 2 9 0" stroke="#c4a03c" stroke-width="1.1" fill="none" opacity=".75"/>
+        <path d="M16 8c1.5-3 4-4 6-2.5-1.5 1.2-3.5 2-6 2.5z" fill="#7d9e78"/>
+      </svg>`,
+    },
+    {
+      id: "petal",
+      name: "花瓣饵",
+      desc: "花运在侧更灵",
+      tier: "rare",
+      svg: `<svg viewBox="0 0 32 32" class="bait-svg" aria-hidden="true">
+        <path d="M16 4c6 5 7 14 0 23C9 18 10 9 16 4z" fill="#f3b8c8"/>
+        <path d="M16 4c6 5 7 14 0 23C9 18 10 9 16 4z" fill="none" stroke="#e896a8" stroke-width="1"/>
+        <path d="M16 7v15" stroke="#fff" stroke-width="1.2" opacity=".55"/>
+        <path d="M9 20c3 2 5 4 7 7M23 20c-3 2-5 4-7 7" stroke="#fff" stroke-width="1" opacity=".35" fill="none"/>
+      </svg>`,
+    },
   ];
 
   const SPECIES = [
@@ -55,11 +88,38 @@
     fightPhase: 0,
     bobberDip: 0,
     lastCastAt: 0,
+    castDir: 0.5,         // 0=偏左 1=偏右
+    castPow: 0.55,        // 0.2-1 远近
     onEvent: null,        // UI 回调
   };
 
   function emit(type, data) {
     if (st.onEvent) st.onEvent(type, data || {});
+  }
+
+  function setCastAim(dir, pow) {
+    st.castDir = Math.max(0, Math.min(1, dir));
+    st.castPow = Math.max(0.18, Math.min(1, pow));
+    emit("aim", { dir: st.castDir, pow: st.castPow });
+    return { dir: st.castDir, pow: st.castPow };
+  }
+
+  // 由方向/能量算落点：杆在右下，向池心抛
+  function aimToXY(dir, pow) {
+    const rx = innerWidth > 720 ? innerWidth - 36 : innerWidth * 0.88;
+    const ry = innerHeight > 640 ? innerHeight - 28 : innerHeight * 0.92;
+    // 左 → 上偏右的扇面，避免贴底或抛出画面
+    const ang = (208 + dir * 88) * Math.PI / 180;
+    const maxD = Math.min(innerWidth, innerHeight) * 0.78;
+    const dist = (0.25 + pow * 0.75) * maxD;
+    let x = rx + Math.cos(ang) * dist;
+    let y = ry + Math.sin(ang) * dist;
+    const m = 36;
+    x = Math.max(m, Math.min(innerWidth - m, x));
+    y = Math.max(m, Math.min(innerHeight - m, y));
+    // 落点控制在水域中段
+    y = Math.max(innerHeight * 0.12, Math.min(y, innerHeight * 0.68));
+    return { x, y, ang, dist, rx, ry };
   }
 
   function setBait(id, silent) {
@@ -119,25 +179,28 @@
     return Math.max(2.5, base);
   }
 
-  function cast(x, y) {
+  // 按当前方向/能量抛竿
+  function cast(dir, pow) {
     if (st.state !== S.IDLE && st.state !== S.CAUGHT) return false;
     const now = performance.now();
     if (now - st.lastCastAt < 400) return false;
+    if (dir != null) st.castDir = Math.max(0, Math.min(1, dir));
+    if (pow != null) st.castPow = Math.max(0.18, Math.min(1, pow));
+    const aim = aimToXY(st.castDir, st.castPow);
     st.lastCastAt = now;
-    st.lineX = x;
-    st.lineY = y;
-    // 竿尖：右下或左下，以靠近落点为准
-    st.rodX = innerWidth > 720 ? innerWidth - 36 : innerWidth * 0.88;
-    st.rodY = innerHeight > 640 ? innerHeight - 28 : innerHeight * 0.92;
+    st.lineX = aim.x;
+    st.lineY = aim.y;
+    st.rodX = aim.rx;
+    st.rodY = aim.ry;
     st.state = S.CASTING;
     st.bobberDip = 0;
     st.tension = 0.35;
     st.fightProgress = 0;
     st.pendingFish = null;
     zenAdd(-1);
-    if (window.Water) Water.addDrop(x, y, 28, 0.9);
-    if (window.Life) Life.startleKoi(x, y);
-    emit("cast", { x, y });
+    if (window.Water) Water.addDrop(aim.x, aim.y, 18 + st.castPow * 16, 0.7 + st.castPow * 0.5);
+    if (window.Life) Life.startleKoi(aim.x, aim.y);
+    emit("cast", { x: aim.x, y: aim.y, pow: st.castPow });
     setTimeout(() => {
       if (st.state !== S.CASTING) return;
       st.state = S.WAITING;
@@ -316,6 +379,8 @@
     S,
     st,
     setBait,
+    setCastAim,
+    aimToXY,
     cast,
     retract,
     hook,

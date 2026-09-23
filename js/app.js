@@ -1,4 +1,4 @@
-/* UI 组装：输入路由、HUD、图鉴、渔获卡。导出 App */
+/* UI 组装：能量滑轮抛竿、饵形切换、HUD、图鉴。导出 App */
 (function () {
   "use strict";
 
@@ -6,10 +6,10 @@
   const $ = (id) => document.getElementById(id);
 
   const els = {
-    hud: $("hud"),
     zenFill: $("zenFill"),
-    zenVal: $("zenVal"),
     baitBar: $("baitBar"),
+    baitPreview: $("baitPreview"),
+    hookBait: $("hookBait"),
     hint: $("hint"),
     toast: $("toast"),
     card: $("catchCard"),
@@ -28,15 +28,35 @@
     tensionWrap: $("tensionWrap"),
     tensionFill: $("tensionFill"),
     tensionHint: $("tensionHint"),
+    tensionPad: $("tensionPad"),
     lineLayer: $("lineLayer"),
     bobber: $("bobber"),
     actionBtn: $("actionBtn"),
     helpBtn: $("helpBtn"),
     help: $("help"),
     helpClose: $("helpClose"),
+    castPanel: $("castPanel"),
+    castBtn: $("castBtn"),
+    castGhost: $("castGhost"),
+    dirRoller: $("dirRoller"),
+    dirThumb: $("dirThumb"),
+    powRoller: $("powRoller"),
+    powThumb: $("powThumb"),
+    powFill: $("powFill"),
   };
 
   const save = loadSave();
+  let castDir = 0.5;
+  let castPow = 0.55;
+  try {
+    const rawDir = localStorage.getItem("fishpond_dir");
+    const rawPow = localStorage.getItem("fishpond_pow");
+    // Number(null)===0，缺键时必须回落默认
+    if (rawDir != null && Number.isFinite(Number(rawDir))) castDir = Number(rawDir);
+    if (rawPow != null && Number.isFinite(Number(rawPow))) castPow = Number(rawPow);
+  } catch (e) { /* ignore */ }
+  castDir = Math.max(0, Math.min(1, castDir));
+  castPow = Math.max(0.18, Math.min(1, castPow));
 
   function loadSave() {
     try {
@@ -59,12 +79,14 @@
   function persist() {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+      localStorage.setItem("fishpond_dir", String(castDir));
+      localStorage.setItem("fishpond_pow", String(castPow));
     } catch (e) { /* 隐身模式忽略 */ }
   }
 
   /* ---------- toast ---------- */
   let toastTimer = 0;
-  function toast(text, ms = 2400) {
+  function toast(text, ms = 2200) {
     els.toast.textContent = text;
     els.toast.classList.add("show");
     clearTimeout(toastTimer);
@@ -75,19 +97,35 @@
   function paintZen(v) {
     save.zen = v;
     els.zenFill.style.width = v + "%";
-    els.zenVal.textContent = Math.round(v);
     persist();
   }
 
-  /* ---------- bait bar ---------- */
+  /* ---------- bait 形象（预览 + 钩上） ---------- */
+  function baitSvgOf(id) {
+    const b = Fishing.getBaits().find((x) => x.id === id);
+    return b ? b.svg : "";
+  }
+
+  function paintBait(idOrObj) {
+    const id = typeof idOrObj === "string" ? idOrObj : idOrObj.id;
+    save.bait = id;
+    persist();
+    const svg = baitSvgOf(id);
+    els.baitPreview.innerHTML = svg;
+    els.hookBait.innerHTML = svg;
+    for (const el of els.baitBar.querySelectorAll(".bait-chip")) {
+      el.classList.toggle("on", el.dataset.id === id);
+    }
+  }
+
   function buildBaitBar() {
     els.baitBar.innerHTML = "";
     for (const b of Fishing.getBaits()) {
       const btn = document.createElement("button");
-      btn.className = "bait";
+      btn.className = "bait-chip";
       btn.dataset.id = b.id;
       btn.title = b.desc;
-      btn.innerHTML = `<span class="bait-icon">${b.icon}</span><span class="bait-name">${b.name}</span>`;
+      btn.innerHTML = `<span class="bait-ico">${b.svg}</span><span>${b.name}</span>`;
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         Fishing.setBait(b.id);
@@ -96,14 +134,68 @@
     }
     paintBait(save.bait);
   }
-  function paintBait(idOrObj) {
-    const id = typeof idOrObj === "string" ? idOrObj : idOrObj.id;
-    save.bait = id;
+
+  /* ---------- energy rollers（方向 / 能量滑轮） ---------- */
+  function setRollerVisual() {
+    els.dirThumb.style.left = (castDir * 100).toFixed(1) + "%";
+    const dFill = els.dirRoller.querySelector(".roller-fill");
+    if (dFill) dFill.style.width = (castDir * 100).toFixed(1) + "%";
+    els.powThumb.style.left = (castPow * 100).toFixed(1) + "%";
+    els.powFill.style.width = (castPow * 100).toFixed(1) + "%";
+  }
+
+  function applyAim(showGhost) {
+    Fishing.setCastAim(castDir, castPow);
+    setRollerVisual();
     persist();
-    for (const el of els.baitBar.querySelectorAll(".bait")) {
-      el.classList.toggle("on", el.dataset.id === id);
+    if (showGhost && Fishing.st.state === Fishing.S.IDLE) {
+      const aim = Fishing.aimToXY(castDir, castPow);
+      els.castGhost.style.opacity = "1";
+      els.castGhost.style.transform = `translate(${aim.x}px, ${aim.y}px)`;
+    } else {
+      els.castGhost.style.opacity = "0";
     }
   }
+
+  function rollerValueFromEvent(roller, e) {
+    const r = roller.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width)));
+  }
+
+  function bindRoller(roller, onVal) {
+    let dragging = false;
+    const start = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      dragging = true;
+      roller.classList.add("dragging");
+      onVal(rollerValueFromEvent(roller, e));
+    };
+    const move = (e) => {
+      if (!dragging) return;
+      e.stopPropagation();
+      onVal(rollerValueFromEvent(roller, e));
+    };
+    const end = (e) => {
+      if (!dragging) return;
+      e.stopPropagation();
+      dragging = false;
+      roller.classList.remove("dragging");
+    };
+    roller.addEventListener("pointerdown", start);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  }
+
+  bindRoller(els.dirRoller, (v) => {
+    castDir = v;
+    applyAim(true);
+  });
+  bindRoller(els.powRoller, (v) => {
+    castPow = Math.max(0.18, v);
+    applyAim(true);
+  });
 
   /* ---------- journal ---------- */
   function buildJournal() {
@@ -119,12 +211,11 @@
         <div class="j-name">${rec ? sp.name : "？？？"}</div>
         <div class="j-sub">${rec ? rec.count + " 尾 · " + rec.best + " kg" : rmeta.label}</div>
       `;
-      if (rec) {
-        cell.addEventListener("click", () => toast(`${sp.name}｜${sp.poem}`, 3200));
-      }
+      if (rec) cell.addEventListener("click", () => toast(`${sp.name}｜${sp.poem}`, 3200));
       els.journalGrid.appendChild(cell);
     }
-    els.journalStats.textContent = `收藏 ${Object.keys(save.records).length}/${list.length} · 起获 ${save.totalCaught} · 放流 ${save.totalReleased}`;
+    els.journalStats.textContent =
+      `识得 ${Object.keys(save.records).length}/${list.length} · 收进 ${save.totalCaught} · 放流 ${save.totalReleased}`;
   }
 
   function openJournal() {
@@ -144,7 +235,6 @@
     els.cardName.textContent = sp.name;
     els.cardMeta.textContent = `${fish.weight} kg · ${fish.size} cm · ${Fishing.st.bait.name}`;
     els.cardPoem.textContent = sp.poem;
-    // 色块鱼影
     els.cardArt.style.setProperty("--c1", sp.colors[0]);
     els.cardArt.style.setProperty("--c2", sp.colors[1]);
     els.card.classList.add("show");
@@ -153,12 +243,9 @@
     els.card.classList.remove("show");
   }
 
-  // 收获才记分；放流只点亮图鉴
   function recordKeep(fish) {
     const id = fish.sp.id;
-    if (!save.records[id]) {
-      save.records[id] = { count: 0, best: 0, name: fish.sp.name };
-    }
+    if (!save.records[id]) save.records[id] = { count: 0, best: 0, name: fish.sp.name };
     save.records[id].count += 1;
     save.records[id].best = Math.max(save.records[id].best, fish.weight);
     save.totalCaught += 1;
@@ -168,9 +255,7 @@
 
   function recordSeen(fish) {
     const id = fish.sp.id;
-    if (!save.records[id]) {
-      save.records[id] = { count: 0, best: 0, name: fish.sp.name };
-    }
+    if (!save.records[id]) save.records[id] = { count: 0, best: 0, name: fish.sp.name };
     save.totalReleased += 1;
     persist();
   }
@@ -185,6 +270,7 @@
   function hideBobber() {
     els.bobber.classList.remove("show");
     bobberVisible = false;
+    els.castGhost.style.opacity = "0";
   }
 
   function drawLine() {
@@ -195,14 +281,13 @@
     }
     const rx = st.rodX, ry = st.rodY;
     const bx = st.lineX, by = st.lineY + (st.bobberDip || 0) * 8;
-    // 竿：右下短杆
     const gx = rx + 28, gy = ry + 40;
     const cx = (rx + bx) / 2;
     const cy = Math.min(ry, by) - 40 - Math.hypot(rx - bx, ry - by) * 0.08;
     els.lineLayer.innerHTML = `
       <svg width="100%" height="100%" style="position:absolute;inset:0">
-        <path d="M${gx} ${gy} Q ${rx + 8} ${ry + 8} ${rx} ${ry}" stroke="#5a4634" stroke-width="4" stroke-linecap="round" fill="none"/>
-        <path d="M${rx} ${ry} Q ${cx} ${cy} ${bx} ${by}" stroke="rgba(255,255,255,.75)" stroke-width="1.2" fill="none"/>
+        <path d="M${gx} ${gy} Q ${rx + 8} ${ry + 8} ${rx} ${ry}" stroke="#6b5344" stroke-width="3.2" stroke-linecap="round" fill="none"/>
+        <path d="M${rx} ${ry} Q ${cx} ${cy} ${bx} ${by}" stroke="rgba(255,255,255,.72)" stroke-width="1.1" fill="none"/>
       </svg>`;
   }
 
@@ -212,7 +297,7 @@
     els.bobber.style.transform = `translate(${st.lineX}px, ${st.lineY + dip * 10}px) scale(${1 - dip * 0.12})`;
   }
 
-  /* ---------- tension bar ---------- */
+  /* ---------- tension ---------- */
   function paintTension(st) {
     const on = st.state === Fishing.S.FIGHTING;
     els.tensionWrap.classList.toggle("show", on);
@@ -226,38 +311,37 @@
     else if (t > 0.35 && t < 0.75) { hint = "手感刚刚好"; cls = "good"; }
     els.tensionHint.textContent = hint;
     els.tensionHint.className = cls;
-    els.tensionFill.style.background =
-      cls === "good" ? "linear-gradient(90deg,#6f9e82,#9bc4a8)" :
-      cls === "high" ? "linear-gradient(90deg,#e87a6a,#f0a090)" :
-      cls === "low" ? "linear-gradient(90deg,#d4a853,#e8c888)" :
-      "linear-gradient(90deg,#7a9bb8,#a8c4d8)";
   }
 
-  /* ---------- action button ---------- */
-  function paintAction(st) {
+  /* ---------- panels visibility ---------- */
+  function paintPanels(st) {
+    const idle = st.state === Fishing.S.IDLE;
+    els.castPanel.classList.toggle("show", idle);
+    els.actionBtn.hidden = idle || st.state === Fishing.S.CAUGHT;
+
     const map = {
-      [Fishing.S.IDLE]: { text: "点水面抛竿", cls: "ghost" },
-      [Fishing.S.CASTING]: { text: "……", cls: "ghost" },
-      [Fishing.S.WAITING]: { text: "静候 · 可收回", cls: "soft" },
-      [Fishing.S.NIBBLE]: { text: "有试探 · 耐心", cls: "wait" },
-      [Fishing.S.BITE]: { text: "咬钩！扬竿", cls: "urgent" },
-      [Fishing.S.FIGHTING]: { text: "按住收线", cls: "urgent" },
-      [Fishing.S.CAUGHT]: { text: "看看渔获", cls: "soft" },
+      [Fishing.S.CASTING]: "……",
+      [Fishing.S.WAITING]: "收回",
+      [Fishing.S.NIBBLE]: "有试探 · 别提",
+      [Fishing.S.BITE]: "扬竿！",
+      [Fishing.S.FIGHTING]: "按住收线",
+      [Fishing.S.CAUGHT]: "看看渔获",
     };
-    const m = map[st.state] || map[Fishing.S.IDLE];
-    els.actionBtn.textContent = m.text;
-    els.actionBtn.className = "action " + m.cls;
-    els.actionBtn.hidden = false;
+    els.actionBtn.textContent = map[st.state] || "";
+    els.actionBtn.className =
+      "action-btn " +
+      (st.state === Fishing.S.BITE || st.state === Fishing.S.FIGHTING ? "urgent" :
+       st.state === Fishing.S.NIBBLE ? "wait" : "soft");
   }
 
   /* ---------- hint ---------- */
   const HINTS = {
-    idle: "轻触水面抛竿 · 试探时请耐心 · 咬钩再扬竿",
-    waiting: "浮漂静了……也许有鱼靠近",
-    nibble: "水下有试探，别急着提竿",
-    bite: "就是现在！",
-    fight: "按住收线，过紧就松一松",
-    caught: "一尾入网 · 也可放流积静心",
+    idle: "拨方向与能量滑轮，按抛竿",
+    waiting: "浮漂静了……",
+    nibble: "水下试探，先别提",
+    bite: "就是现在",
+    fight: "按住收线，过紧就松",
+    caught: "一尾入网",
   };
   function setHint(k) {
     els.hint.textContent = HINTS[k] || HINTS.idle;
@@ -271,36 +355,31 @@
     switch (type) {
       case "bait":
         paintBait(data.bait);
-        if (!data.silent) toast(`换上${data.bait.name}`);
+        if (!data.silent) toast(`换上${data.bait.name}`, 1500);
         break;
       case "zen":
         paintZen(data.zen);
         break;
+      case "aim":
+        break;
       case "cast":
         showBobber(data.x, data.y);
         setHint("waiting");
-        paintAction(Fishing.st);
-        toast("浮漂轻轻落下");
         break;
       case "waiting":
         setHint("waiting");
-        paintAction(Fishing.st);
         break;
       case "nibble":
       case "nibbleTick":
         setHint("nibble");
-        paintAction(Fishing.st);
-        if (type === "nibble") toast("水下有动静……", 1400);
+        if (type === "nibble") toast("水下有动静", 1200);
         break;
       case "bite":
         setHint("bite");
-        paintAction(Fishing.st);
-        toast("咬钩！", 1200);
+        toast("咬钩", 1000);
         break;
       case "fight":
         setHint("fight");
-        paintAction(Fishing.st);
-        toast("稳住手感", 1400);
         break;
       case "blank":
         toast("空空如也");
@@ -309,56 +388,50 @@
         hideBobber();
         hideCard();
         setHint("idle");
-        paintAction(Fishing.st);
-        toast(data.text || "游走了", 2200);
+        toast(data.text || "游走了", 2000);
         break;
       case "retract":
         hideBobber();
         setHint("idle");
-        paintAction(Fishing.st);
-        toast("收回鱼线");
         break;
       case "caught":
         showBobber(Fishing.st.lineX, Fishing.st.lineY);
         showCard(data.fish);
         setHint("caught");
-        paintAction(Fishing.st);
         break;
       case "kept":
         hideBobber();
         hideCard();
         setHint("idle");
-        paintAction(Fishing.st);
-        toast("收入篓篓 · 已记入图鉴", 1600);
+        toast("收进篓篓", 1500);
         break;
       case "released":
         hideBobber();
         hideCard();
         setHint("idle");
-        paintAction(Fishing.st);
-        toast("放归池中 · 静心 +5", 1800);
+        toast("放归池中 · 静心 +5", 1600);
         break;
       default:
         break;
     }
-    paintAction(Fishing.st);
+    paintPanels(Fishing.st);
   };
 
   /* ---------- input ---------- */
   function isUiTarget(e) {
-    return e.target.closest(".ui, .panel, .card, .hud");
+    return e.target.closest(".hud, .panel, .card, .roller");
+  }
+
+  function doCast() {
+    if (Fishing.st.state !== Fishing.S.IDLE) return;
+    Fishing.cast(castDir, castPow);
   }
 
   function onPointerDown(e) {
     if (isUiTarget(e)) return;
-    const x = e.clientX, y = e.clientY;
     const st = Fishing.st;
-    if (st.state === Fishing.S.BITE) {
+    if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) {
       Fishing.hook();
-      return;
-    }
-    if (st.state === Fishing.S.NIBBLE) {
-      Fishing.hook(); // 提前扬竿会惊走，由状态机处理
       return;
     }
     if (st.state === Fishing.S.FIGHTING) {
@@ -366,18 +439,13 @@
       return;
     }
     if (st.state === Fishing.S.WAITING) {
-      // 点击 = 收回重抛
       Fishing.retract();
       return;
     }
-    if (st.state === Fishing.S.IDLE) {
-      // 点花运附近提示
-      const luck = Life.flowerLuck(x, y);
-      Fishing.cast(x, y);
-      if (luck > 0.3) toast("荷花近旁，花运正盛", 1800);
-      if (window.Water) Water.addDrop(x, y, 10, 0.15);
+    // IDLE：点水面仅起涟漪，抛竿走滑轮
+    if (st.state === Fishing.S.IDLE && window.Water) {
+      Water.addDrop(e.clientX, e.clientY, 8, 0.12);
     }
-    // CAUGHT: 卡片处理，不抛竿
   }
 
   function onPointerUp() {
@@ -388,23 +456,30 @@
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
 
-  // 移动时轻微涟漪（不干扰钓鱼）
   let lastMove = null;
   window.addEventListener("pointermove", (e) => {
     if (isUiTarget(e)) return;
-    if (lastMove) {
+    if (lastMove && window.Water && Fishing.st.state === Fishing.S.IDLE) {
       const speed = Math.hypot(e.clientX - lastMove.x, e.clientY - lastMove.y);
-      if (speed > 18 && Fishing.st.state === Fishing.S.IDLE) {
-        Water.addDrop(e.clientX, e.clientY, 7 + speed * 0.05, Math.min(0.12, 0.02 + speed * 0.001));
+      if (speed > 18) {
+        Water.addDrop(e.clientX, e.clientY, 7 + speed * 0.05, Math.min(0.1, 0.02 + speed * 0.001));
       }
     }
     lastMove = { x: e.clientX, y: e.clientY };
   }, { passive: true });
 
-  // 拖拽收线：按住张力区
+  els.tensionPad.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    Fishing.setReeling(true);
+  });
   els.tensionWrap.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
     Fishing.setReeling(true);
+  });
+
+  els.castBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    doCast();
   });
 
   els.actionBtn.addEventListener("pointerdown", (e) => {
@@ -413,7 +488,6 @@
     if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) Fishing.hook();
     else if (st.state === Fishing.S.FIGHTING) Fishing.setReeling(true);
     else if (st.state === Fishing.S.WAITING) Fishing.retract();
-    else if (st.state === Fishing.S.IDLE) toast("轻触水面任意处抛竿");
   });
   els.actionBtn.addEventListener("pointerup", (e) => {
     e.stopPropagation();
@@ -452,12 +526,12 @@
     els.help.classList.remove("open");
   });
 
-  // 键盘：空格扬竿/收线
   window.addEventListener("keydown", (e) => {
     if (e.code === "Space") {
       e.preventDefault();
       const st = Fishing.st;
-      if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) Fishing.hook();
+      if (st.state === Fishing.S.IDLE) doCast();
+      else if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) Fishing.hook();
       else if (st.state === Fishing.S.FIGHTING) Fishing.setReeling(true);
     }
     if (e.code === "Escape") {
@@ -475,15 +549,14 @@
     Fishing.setBait(save.bait || "worm", true);
     Fishing.st.zen = save.zen;
     paintZen(Fishing.st.zen);
+    Fishing.setCastAim(castDir, castPow);
+    setRollerVisual();
+    applyAim(true);
     setHint("idle");
-    paintAction(Fishing.st);
-    // 初始提示稍后淡出
-    setTimeout(() => {
-      els.hint.style.opacity = "0.55";
-    }, 5000);
+    paintPanels(Fishing.st);
   }
 
-  function frame(now, dt) {
+  function frame() {
     const st = Fishing.st;
     drawLine();
     paintBobber(st);
