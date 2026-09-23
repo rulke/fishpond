@@ -1,0 +1,9 @@
+# 本地验证与构建产物
+_scratch/
+output/
+
+# Windows 误复制副本
+*副本*
+
+# 依赖缓存
+node_modules/
