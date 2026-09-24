@@ -313,23 +313,47 @@
   }
 
   /* ---------- journal ---------- */
+  function miniFishSvg(sp, w) {
+    const c1 = sp.colors[0], c2 = sp.colors[1];
+    return `<svg viewBox="0 0 60 28" width="${w}" height="${Math.round(w * 28 / 60)}" aria-hidden="true">
+      <path d="M50 14 C44 6 32 4 22 8 C16 10 12 12 12 14 C12 16 16 18 22 20 C32 24 44 22 50 14 Z" fill="${c1}"/>
+      <path d="M13 14 L4 7 L6.5 14 L4 21 Z" fill="${c2}"/>
+      <ellipse cx="33" cy="13" rx="6" ry="3" fill="${c2}" opacity=".45"/>
+      <circle cx="45" cy="13" r="1.6" fill="#233"/>
+    </svg>`;
+  }
+
   function buildJournal() {
-    els.journalGrid.innerHTML = "";
     const list = Fishing.getSpecies();
-    for (const sp of list) {
-      const rec = save.records[sp.id];
-      const rmeta = Fishing.getRarityMeta(sp.rarity);
-      const cell = document.createElement("button");
-      cell.className = "j-cell" + (rec ? " got" : "");
-      cell.innerHTML = `
-        <div class="j-dot" style="background:${rmeta.color}"></div>
-        <div class="j-name">${rec ? sp.name : "？？？"}</div>
-        <div class="j-sub">${rec ? rec.count + " 尾 · " + rec.best + " kg" : rmeta.label}</div>
-      `;
-      els.journalGrid.appendChild(cell);
+    const groups = {};
+    for (const sp of list) (groups[sp.rarity] = groups[sp.rarity] || []).push(sp);
+    const order = ["common", "mid", "rare", "epic", "legend"];
+    let html = "";
+    for (const r of order) {
+      const g = groups[r];
+      if (!g) continue;
+      const meta = Fishing.getRarityMeta(r);
+      html += `<div class="j-group"><div class="j-group-head" style="color:${meta.color}">${meta.label}</div><div class="j-grid">`;
+      for (const sp of g) {
+        const rec = save.records[sp.id];
+        html += rec && rec.count > 0
+          ? `<button class="j-cell got">${miniFishSvg(sp, 56)}<div class="j-name">${sp.name}</div><div class="j-sub">${rec.count} 尾 · ${rec.best} kg</div></button>`
+          : `<button class="j-cell"><div class="j-dot" style="background:${meta.color}"></div><div class="j-name">？？？</div><div class="j-sub">${meta.label}</div></button>`;
+      }
+      html += `</div></div>`;
+    }
+    els.journalGrid.innerHTML = html;
+    // 统计：识得 / 收进 / 放流 / 最大纪录
+    let best = null;
+    for (const id in save.records) {
+      const rec = save.records[id];
+      if (rec.count > 0 && rec.best > 0 && (!best || rec.best > best.best)) {
+        best = { name: rec.name, best: rec.best };
+      }
     }
     els.journalStats.textContent =
-      `识得 ${Object.keys(save.records).length}/${list.length} · 收进 ${save.totalCaught} · 放流 ${save.totalReleased}`;
+      `识得 ${Object.keys(save.records).length}/${list.length} · 收进 ${save.totalCaught} · 放流 ${save.totalReleased}` +
+      (best ? ` · 最大 ${best.name} ${best.best} kg` : "");
   }
 
   function openJournal() {

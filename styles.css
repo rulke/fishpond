@@ -668,6 +668,19 @@ html, body {
   flex-shrink: 0;
 }
 #journalGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.j-group-head {
+  font-family: var(--serif);
+  font-size: 12px;
+  letter-spacing: .3em;
+  text-indent: .3em;
+  margin-bottom: 8px;
+  opacity: .9;
+}
+.j-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
@@ -676,7 +689,7 @@ html, body {
   border: 1px solid var(--edge-soft);
   background: rgba(255, 255, 255, 0.35);
   border-radius: 12px;
-  padding: 12px 8px;
+  padding: 10px 6px;
   cursor: default;
   text-align: center;
   font-family: var(--sans);
@@ -685,6 +698,7 @@ html, body {
   cursor: pointer;
   background: #fff;
 }
+.j-cell.got .j-name { margin-top: 4px; }
 .j-dot {
   width: 8px; height: 8px; border-radius: 50%;
   margin: 0 auto 8px;
@@ -714,7 +728,7 @@ html, body {
 
 @media (max-width: 560px) {
   .brand { font-size: 12px; letter-spacing: .18em; }
-  #journalGrid { grid-template-columns: repeat(2, 1fr); }
+  #journalGrid .j-grid { grid-template-columns: repeat(2, 1fr); }
   .bait-chip { width: 40px; height: 40px; }
   #reelGauge { width: 78px; height: 78px; }
   #baitTag { max-width: calc(100vw - 24px); flex-wrap: wrap; }
