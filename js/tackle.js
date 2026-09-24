@@ -61,13 +61,12 @@
 
   function rodAnchor() {
     const W = innerWidth, H = innerHeight;
-    return {
-      bx: W + 10,
-      by: H + 12,
-      // 竿尖探入画面多一些，让"竿"看得见（扇面原点与此同源）
-      tx: W > 720 ? W - 140 : W * 0.74,
-      ty: H > 640 ? H - 120 : H * 0.8,
-    };
+    // 方案 A：竿根藏在坞后，竿尖探入画面中偏右——"执竿坐塘边"的视角
+    const bx = W > 720 ? W * 0.5 + 160 : W * 0.5 + 110;
+    const by = H + 16;
+    const tx = W > 720 ? W * 0.5 + 60 : W * 0.55;
+    const ty = H > 640 ? H * 0.74 : H * 0.76;
+    return { bx, by, tx, ty };
   }
 
   function setBait(svg) {
@@ -124,7 +123,7 @@
       bobber.style.transform = `translate(${from.x}px, ${from.y}px)`;
     }
     phase = "windup";
-    bendTarget = -0.55;
+    bendTarget = -0.78;
     bobX = from.x;
     bobY = from.y;
   }
@@ -160,13 +159,16 @@
   function tipPosition() {
     const a = rodAnchor();
     const bendPx = bend * 22;
+    // 握把取竿身上靠根部的一点（尖→根 62% 处）
+    const gx = a.tx + (a.bx - a.tx) * 0.62;
+    const gy = a.ty + (a.by - a.ty) * 0.62;
     return {
       x: a.tx - bendPx * 0.7,
       y: a.ty - bendPx * 0.7,
       baseX: a.tx,
       baseY: a.ty,
-      gripX: a.bx - 56,
-      gripY: a.by - 48,
+      gripX: gx,
+      gripY: gy,
     };
   }
 
@@ -175,13 +177,13 @@
     anim.t += dt;
     const t = anim.t;
 
-    // 0–0.12 后摆 | 0.12–0.22 弹出 | 0.22–0.50 飞行 | 0.50–0.62 落水
+    // 0–0.12 深后摆 | 0.12–0.22 鞭击 | 0.22–0.50 飞行 | 0.50–0.62 落水
     if (t < 0.12) {
       phase = "windup";
-      bendTarget = -0.6;
+      bendTarget = -0.78;
     } else if (t < 0.22) {
       phase = "whip";
-      bendTarget = 0.75;
+      bendTarget = 0.95;
     } else if (t < 0.5) {
       phase = "flight";
       bendTarget = 0.15;
@@ -218,7 +220,16 @@
       const e = u * u * (3 - 2 * u);
       const a = rodAnchor();
       bobX = reel.fx + (a.tx - reel.fx) * e;
-      bobY = reel.fy + (a.ty - reel.fy) * e - Math.sin(u * Math.PI) * 14;
+      bobY = reel.fy + (a.ty - reel.fy) * e;
+      // 收杆：漂贴水跳回（渐弱弹跳），竿身上扬，跳点起小涟漪
+      const hop = Math.abs(Math.sin(u * Math.PI * 2.2)) * (1 - u) * 30;
+      bobY -= hop;
+      bendTarget = -0.2 + u * 0.5;
+      reel.dropT = (reel.dropT || 0) - dt;
+      if (hop > 8 && reel.dropT <= 0 && window.Water) {
+        Water.addDrop(bobX, bobY, 7, 0.2);
+        reel.dropT = 0.16;
+      }
       if (bobber) bobber.style.transform = `translate(${bobX.toFixed(1)}px, ${bobY.toFixed(1)}px)`;
       if (u >= 1) hide();
     } else if (anim) {

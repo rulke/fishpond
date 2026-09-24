@@ -109,10 +109,10 @@
     return { dir: st.castDir, pow: st.castPow };
   }
 
-  // 由方向/能量算落点：杆在右下，向池心抛（竿尖探入画面，扇面与竿同源）
+  // 由方向/能量算落点：竿居中偏右，向池心抛（扇面与竿尖同源）
   function aimToXY(dir, pow) {
-    const rx = innerWidth > 720 ? innerWidth - 140 : innerWidth * 0.74;
-    const ry = innerHeight > 640 ? innerHeight - 120 : innerHeight * 0.8;
+    const rx = innerWidth > 720 ? innerWidth * 0.5 + 60 : innerWidth * 0.55;
+    const ry = innerHeight > 640 ? innerHeight * 0.74 : innerHeight * 0.76;
     // 左 → 上偏右的扇面，避免贴底或抛出画面
     const ang = (208 + dir * 88) * Math.PI / 180;
     const maxD = Math.min(innerWidth, innerHeight) * 0.78;
@@ -171,16 +171,17 @@
 
   // 从杆尖到指针：返回合法落点（扇面内）
   function aimFromPointer(px, py) {
-    const rx = innerWidth > 720 ? innerWidth - 140 : innerWidth * 0.74;
-    const ry = innerHeight > 640 ? innerHeight - 120 : innerHeight * 0.8;
+    const rx = innerWidth > 720 ? innerWidth * 0.5 + 60 : innerWidth * 0.55;
+    const ry = innerHeight > 640 ? innerHeight * 0.74 : innerHeight * 0.76;
     const dx = px - rx, dy = py - ry;
     let ang = Math.atan2(dy, dx);
-    // 屏幕坐标：左 180°、上 270°。扇面限制在 195°–305°
-    const minA = 195 * Math.PI / 180;
-    const maxA = 305 * Math.PI / 180;
-    // 角度可能落在 -π..π，归一到 0..2π 再夹
+    // 屏幕坐标：竿在下方，扇面铺满上方 175°–365°
+    const minA = 175 * Math.PI / 180;
+    const maxA = 365 * Math.PI / 180;
+    // 角度归一到 minA 起算的区间再夹（正上方两侧都要覆盖）
     let deg = ang;
     if (deg < 0) deg += Math.PI * 2;
+    if (deg < minA) deg += Math.PI * 2;
     deg = Math.max(minA, Math.min(maxA, deg));
     ang = deg;
     const maxD = Math.min(innerWidth, innerHeight) * 0.82;
@@ -214,7 +215,7 @@
     st.lineY = aim.y;
     st.rodX = aim.rx;
     st.rodY = aim.ry;
-    st.castDir = (aim.ang - 195 * Math.PI / 180) / (110 * Math.PI / 180);
+    st.castDir = Math.max(0, Math.min(1, (aim.ang - 175 * Math.PI / 180) / (190 * Math.PI / 180)));
     st.castPow = aim.pow;
     st.state = S.CASTING;
     st.bobberDip = 0;
