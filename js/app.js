@@ -1,4 +1,4 @@
-/* UI 组装：器物抛竿坞、莲苞静心、渔获卡、图鉴。导出 App */
+/* UI 组装：扇面拖抛、青瓷冰裂、全物态反馈（无飘字）。导出 App */
 (function () {
   "use strict";
 
@@ -7,16 +7,14 @@
 
   const els = {
     baitBar: $("baitBar"),
-    baitPreview: $("baitPreview"),
-    hint: $("hint"),
-    toast: $("toast"),
+    baitTag: $("baitTag"),
     card: $("catchCard"),
-    cardArt: $("cardArt"),
     cardFish: $("cardFish"),
     cardName: $("cardName"),
     cardMeta: $("cardMeta"),
     cardPoem: $("cardPoem"),
     cardRarity: $("cardRarity"),
+    cardBadge: $("cardBadge"),
     btnKeep: $("btnKeep"),
     btnRelease: $("btnRelease"),
     journalBtn: $("journalBtn"),
@@ -24,48 +22,44 @@
     journalGrid: $("journalGrid"),
     journalClose: $("journalClose"),
     journalStats: $("journalStats"),
-    zenLotus: $("zenLotus"),
+    zenBeads: $("zenBeads"),
     tensionWrap: $("tensionWrap"),
-    tensionFill: $("tensionFill"),
-    tensionHint: $("tensionHint"),
-    tensionPad: $("tensionPad"),
+    reelNeedle: $("reelNeedle"),
     actionBtn: $("actionBtn"),
     helpBtn: $("helpBtn"),
     help: $("help"),
     helpClose: $("helpClose"),
     castPanel: $("castPanel"),
     castBtn: $("castBtn"),
-    castGhost: $("castGhost"),
-    dirRoller: $("dirRoller"),
-    dirThumb: $("dirThumb"),
-    powRoller: $("powRoller"),
-    powThumb: $("powThumb"),
-    powFill: $("powFill"),
-    sweetZone: $("sweetZone"),
+    aimFan: $("aimFan"),
+    aimVeil: $("aimVeil"),
+    retractBtn: $("retractBtn"),
+    dock: $("dock"),
   };
 
   const save = loadSave();
-  let castDir = 0.5;
-  let castPow = 0.55;
   let sweetStart = 0.42;
   const SWEET_W = 0.12;
+  let manualCasts = 0;
+
+  // 拖抛瞄准
+  let aiming = false;
+  let aim = null; // Fishing.aimFromPointer 结果
+  let aimMoved = false;
+  let fanKey = "";
+  let tagTimer = 0;
+  let press = null; // IDLE 按下待判定：拖够距离才瞄准
+  let fanHoldUntil = 0; // 逃鱼/收线后扇面缓一拍再回来
+  let waitFull = 0; // 本竿等待总时长，用于鱼影三段渐近
 
   try {
-    const rawDir = localStorage.getItem("fishpond_dir");
-    const rawPow = localStorage.getItem("fishpond_pow");
     const rawSweet = localStorage.getItem("fishpond_sweet");
-    if (rawDir != null && Number.isFinite(Number(rawDir))) castDir = Number(rawDir);
-    if (rawPow != null && Number.isFinite(Number(rawPow))) castPow = Number(rawPow);
     if (rawSweet != null && Number.isFinite(Number(rawSweet))) sweetStart = Number(rawSweet);
     else sweetStart = 0.12 + Math.random() * 0.72;
   } catch (e) {
     sweetStart = 0.12 + Math.random() * 0.72;
   }
-  castDir = clamp01(castDir);
-  castPow = Math.max(0.18, Math.min(1, castPow));
   sweetStart = Math.max(0.05, Math.min(0.83, sweetStart));
-
-  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
   function loadSave() {
     try {
@@ -88,8 +82,6 @@
   function persist() {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(save));
-      localStorage.setItem("fishpond_dir", String(castDir));
-      localStorage.setItem("fishpond_pow", String(castPow));
       localStorage.setItem("fishpond_sweet", String(sweetStart));
     } catch (e) { /* 隐身模式忽略 */ }
   }
@@ -98,41 +90,41 @@
     return p >= sweetStart && p <= sweetStart + SWEET_W;
   }
 
+  // 甜区只在一次收获后才换位置，肌肉记忆不白练
   function rerollSweet() {
     sweetStart = 0.1 + Math.random() * 0.74;
     persist();
-    paintRollers();
   }
 
-  /* ---------- toast ---------- */
-  let toastTimer = 0;
-  function toast(text, ms = 1600) {
-    els.toast.textContent = text;
-    els.toast.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => els.toast.classList.remove("show"), ms);
-  }
-
-  /* ---------- zen lotus（5 瓣） ---------- */
+  /* ---------- zen beads ---------- */
   function paintZen(v) {
     save.zen = v;
     persist();
     const filled = Math.round((v / 100) * 5);
-    let petals = "";
-    // 五瓣莲苞：外瓣张开、内瓣收拢
+    let html = "";
     for (let i = 0; i < 5; i++) {
       const on = i < filled;
-      const rot = (i - 2) * 36;
-      const r = on ? 1.05 : 0.92;
-      petals += `<path d="M24 20 C18 14 18 6 24 2 C30 6 30 14 24 20 Z"
-        transform="rotate(${rot} 24 20) scale(${r}) translate(${(1 - r) * 24 / r} ${(1 - r) * 20 / r})"
-        fill="${on ? "#e8a8b8" : "rgba(42,69,84,.10)"}"
-        stroke="${on ? "#d48aa0" : "rgba(42,69,84,.12)"}" stroke-width=".7"/>`;
+      const full = v >= 95 && i === 4;
+      html += `<span class="zen-bead${on ? " on" : ""}${full ? " full" : ""}"></span>`;
     }
-    const core = v >= 95
-      ? `<circle cx="24" cy="19" r="3" fill="#c9a45a"/>`
-      : `<circle cx="24" cy="19" r="2.4" fill="${filled > 2 ? "#e8d4a0" : "rgba(42,69,84,.16)"}"/>`;
-    els.zenLotus.innerHTML = petals + core;
+    els.zenBeads.innerHTML = html;
+  }
+
+  // 放流后一颗静心珠从按钮飞回顶栏
+  function flyBead(fromEl) {
+    const a = fromEl.getBoundingClientRect();
+    const b = els.zenBeads.getBoundingClientRect();
+    const bead = document.createElement("span");
+    bead.className = "fly-bead";
+    bead.style.left = (a.left + a.width / 2) + "px";
+    bead.style.top = (a.top + a.height / 2) + "px";
+    document.body.appendChild(bead);
+    const dx = (b.left + b.width / 2) - (a.left + a.width / 2);
+    const dy = (b.top + b.height / 2) - (a.top + a.height / 2);
+    bead.animate([
+      { transform: "translate(0,0) scale(1)", opacity: 1 },
+      { transform: `translate(${dx}px, ${dy}px) scale(.5)`, opacity: .1 },
+    ], { duration: 750, easing: "cubic-bezier(.2,.8,.2,1)" }).onfinish = () => bead.remove();
   }
 
   /* ---------- bait ---------- */
@@ -141,15 +133,37 @@
     return b ? b.svg : "";
   }
 
-  function paintBait(idOrObj) {
+  function showBaitTag(b) {
+    const liked = Fishing.getSpecies().filter((sp) => sp.baits.includes(b.id));
+    const fish = liked.map((sp) => {
+      const c = Fishing.getRarityMeta(sp.rarity).color;
+      return `<svg viewBox="0 0 20 10" aria-label="${sp.name}"><path d="M19 5 C15 1 9 1 5 4 L1 1 L2.5 5 L1 9 L5 6 C9 9 15 9 19 5 Z" fill="${c}"/></svg>`;
+    }).join("");
+    els.baitTag.innerHTML = `<b>${b.name}</b><i>${b.desc}</i><span class="tag-fish">${fish}</span>`;
+    els.baitTag.classList.add("show");
+    clearTimeout(tagTimer);
+    tagTimer = setTimeout(() => els.baitTag.classList.remove("show"), 2400);
+  }
+
+  function paintBait(idOrObj, silent) {
     const id = typeof idOrObj === "string" ? idOrObj : idOrObj.id;
     save.bait = id;
     persist();
     const svg = baitSvgOf(id);
-    els.baitPreview.innerHTML = svg;
     if (window.Tackle) Tackle.setBait(svg);
     for (const el of els.baitBar.querySelectorAll(".bait-chip")) {
-      el.classList.toggle("on", el.dataset.id === id);
+      const on = el.dataset.id === id;
+      el.classList.toggle("on", on);
+      if (on && !silent) {
+        el.animate(
+          [{ transform: "scale(1)" }, { transform: "scale(1.08)" }, { transform: "scale(1)" }],
+          { duration: 280, easing: "ease-out" }
+        );
+      }
+    }
+    if (!silent) {
+      const b = Fishing.getBaits().find((x) => x.id === id);
+      if (b) showBaitTag(b);
     }
   }
 
@@ -159,85 +173,146 @@
       const btn = document.createElement("button");
       btn.className = "bait-chip";
       btn.dataset.id = b.id;
-      btn.title = b.desc;
-      btn.innerHTML = `<span class="bait-ico">${b.svg}</span><span>${b.name}</span>`;
+      btn.title = b.name;
+      btn.setAttribute("aria-label", b.name);
+      btn.innerHTML = `<span class="bait-ico">${b.svg}</span>`;
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         Fishing.setBait(b.id);
       });
       els.baitBar.appendChild(btn);
     }
-    paintBait(save.bait);
+    paintBait(save.bait, true);
   }
 
-  /* ---------- rollers ---------- */
-  function paintRollers() {
-    els.dirThumb.style.left = (castDir * 100).toFixed(1) + "%";
-    const dFill = els.dirRoller.querySelector(".ruler-fill");
-    if (dFill) dFill.style.width = (castDir * 100).toFixed(1) + "%";
-    els.powThumb.style.left = (castPow * 100).toFixed(1) + "%";
-    els.powFill.style.width = (castPow * 100).toFixed(1) + "%";
-    els.sweetZone.style.left = (sweetStart * 100).toFixed(1) + "%";
-    els.sweetZone.style.width = (SWEET_W * 100).toFixed(1) + "%";
+  /* ---------- 扇面拖抛 ---------- */
+  function polar(rx, ry, ang, r) {
+    return [rx + Math.cos(ang) * r, ry + Math.sin(ang) * r];
   }
 
-  function applyAim(showGhost) {
-    Fishing.setCastAim(castDir, castPow);
-    paintRollers();
-    persist();
-    const sweet = inSweet(castPow);
-    if (showGhost && Fishing.st.state === Fishing.S.IDLE) {
-      const aim = Fishing.aimToXY(castDir, castPow);
-      els.castGhost.style.opacity = "1";
-      els.castGhost.style.transform = `translate(${aim.x}px, ${aim.y}px)`;
-      els.castGhost.classList.toggle("sweet", sweet);
-      els.sweetZone.classList.toggle("hit", sweet);
-    } else {
-      els.castGhost.style.opacity = "0";
-      els.castGhost.classList.remove("sweet");
-      els.sweetZone.classList.remove("hit");
+  function paintFan(force) {
+    const st = Fishing.st.state;
+    const showAim = aim && (aiming || st === Fishing.S.IDLE);
+    if (!showAim || !aim) {
+      if (els.aimFan.childNodes.length) els.aimFan.innerHTML = "";
+      fanKey = "";
+      return;
     }
+    const sweet = inSweet(aim.pow);
+    // 待机只留"落点小漂 + 弱光带"；按住水面才展开整面
+    const mode = aiming ? "aim" : "idle";
+    const key = [mode, aim.x.toFixed(1), aim.y.toFixed(1), aim.ang.toFixed(3), aim.dist.toFixed(1), sweet ? 1 : 0].join("|");
+    if (!force && key === fanKey) return;
+    fanKey = key;
+
+    const { rx, ry, ang, dist, pow, minD, maxD } = aim;
+    const spread = 14 * Math.PI / 180;
+    const a1 = ang - spread, a2 = ang + spread;
+    const rOut = maxD;
+    const [x1, y1] = polar(rx, ry, a1, rOut);
+    const [x2, y2] = polar(rx, ry, a2, rOut);
+    const [xt, yt] = polar(rx, ry, ang, dist);
+    // 甜区弧带
+    const s0 = sweetStart, s1 = sweetStart + SWEET_W;
+    const d0 = minD + s0 * (maxD - minD);
+    const d1 = minD + s1 * (maxD - minD);
+    const [sx1, sy1] = polar(rx, ry, a1, d0);
+    const [sx2, sy2] = polar(rx, ry, a2, d0);
+    const [sx3, sy3] = polar(rx, ry, a2, d1);
+    const [sx4, sy4] = polar(rx, ry, a1, d1);
+    const band = (fill, stroke, w) =>
+      `<path d="M${sx1} ${sy1} L${sx2} ${sy2} A${d0} ${d0} 0 0 1 ${sx3} ${sy3} L${sx4} ${sy4} A${d1} ${d1} 0 0 0 ${sx1} ${sy1} Z"
+        fill="rgba(159,208,220,${fill})" stroke="rgba(255,255,255,${stroke})" stroke-width="${w}" class="band-core"/>`;
+    const preview = `
+      <g class="pv-bob${sweet ? " sweet" : ""}" transform="translate(${xt.toFixed(1)} ${yt.toFixed(1)})${sweet ? " translate(0 2)" : ""}">
+        <ellipse cx="0" cy="10" rx="9" ry="2.6" fill="rgba(255,255,255,.28)"/>
+        <rect x="-2.6" y="-13" width="5.2" height="6" rx="2.6" fill="#e88a9a"/>
+        <rect x="-4.6" y="-7.6" width="9.2" height="12" rx="4" fill="#fbfdfe" stroke="rgba(120,160,180,.55)" stroke-width="1"/>
+        <rect x="-0.9" y="4.4" width="1.8" height="7" rx="0.9" fill="#a88868"/>
+      </g>`;
+
+    if (mode === "idle") {
+      els.aimFan.innerHTML = band(0.2, 0.45, 1.2) + preview;
+      return;
+    }
+
+    // 距离刻度（瞄准态）
+    let ticks = "";
+    for (let i = 1; i <= 6; i++) {
+      const rt = minD + (maxD - minD) * (i / 7);
+      const [t1x, t1y] = polar(rx, ry, ang, rt);
+      const [t2x, t2y] = polar(rx, ry, ang, rt + 9);
+      ticks += `<line class="fan-tick" x1="${t1x.toFixed(1)}" y1="${t1y.toFixed(1)}" x2="${t2x.toFixed(1)}" y2="${t2y.toFixed(1)}"/>`;
+    }
+    els.aimFan.innerHTML = `
+      <path d="M${rx} ${ry} L${x1} ${y1} A${rOut} ${rOut} 0 0 1 ${x2} ${y2} Z"
+        fill="rgba(72,120,140,0.16)" stroke="rgba(44,74,88,0.38)" stroke-width="1.2"/>
+      ${band(sweet ? 0.52 : 0.26, sweet ? 0.95 : 0.6, 1.6)}
+      ${ticks}
+      ${preview}
+    `;
   }
 
-  function rollerValueFromEvent(roller, e) {
-    const r = roller.getBoundingClientRect();
-    return clamp01((e.clientX - r.left) / Math.max(1, r.width));
+  function startAim(x, y) {
+    if (Fishing.st.state !== Fishing.S.IDLE) return;
+    aiming = true;
+    aimMoved = false;
+    aim = Fishing.aimFromPointer(x, y);
+    els.aimVeil.classList.add("show");
+    paintFan(true);
   }
 
-  function bindRoller(roller, onVal) {
-    let dragging = false;
-    const start = (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      dragging = true;
-      roller.classList.add("dragging");
-      onVal(rollerValueFromEvent(roller, e));
-    };
-    const move = (e) => {
-      if (!dragging) return;
-      e.stopPropagation();
-      onVal(rollerValueFromEvent(roller, e));
-    };
-    const end = (e) => {
-      if (!dragging) return;
-      e.stopPropagation();
-      dragging = false;
-      roller.classList.remove("dragging");
-    };
-    roller.addEventListener("pointerdown", start);
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", end);
-    window.addEventListener("pointercancel", end);
+  function moveAim(x, y) {
+    if (!aiming) return;
+    const next = Fishing.aimFromPointer(x, y);
+    if (aim && Math.hypot(next.x - aim.x, next.y - aim.y) > 4) aimMoved = true;
+    aim = next;
+    paintFan();
   }
 
-  bindRoller(els.dirRoller, (v) => {
-    castDir = v;
-    applyAim(true);
-  });
-  bindRoller(els.powRoller, (v) => {
-    castPow = Math.max(0.18, v);
-    applyAim(true);
-  });
+  function clearFan() {
+    els.aimFan.innerHTML = "";
+    fanKey = "";
+    els.aimVeil.classList.remove("show");
+  }
+
+  function endAim(x, y) {
+    if (!aiming) return;
+    aiming = false;
+    clearFan();
+    if (Fishing.st.state !== Fishing.S.IDLE) return;
+    if (aimMoved) {
+      manualCasts += 1;
+      if (manualCasts >= 3) els.castBtn.classList.add("dim");
+    }
+    // 极短按则以落点为瞄准
+    const target = aim || Fishing.aimFromPointer(x, y);
+    castTo(target.x, target.y);
+  }
+
+  function cancelAim() {
+    if (!aiming) { return; }
+    aiming = false;
+    clearFan();
+  }
+
+  function castTo(x, y) {
+    if (window.Tackle && Tackle.reeling) return false; // 漂还没收回，先不抛
+    const ok = Fishing.castPoint(x, y);
+    if (ok) {
+      clearFan();
+      if (window.Tackle) {
+        // 分镜落点必须用钳制后的真实落点，否则漂与鱼影/涟漪分家
+        const lx = Fishing.st.lineX, ly = Fishing.st.lineY;
+        Tackle.startFlight({ x: Fishing.st.rodX, y: Fishing.st.rodY }, {
+          x: lx, y: ly, dist: Math.hypot(lx - Fishing.st.rodX, ly - Fishing.st.rodY),
+        });
+        Tackle.setBait(baitSvgOf(save.bait));
+        Tackle.setShadow("off");
+      }
+    }
+    return ok;
+  }
 
   /* ---------- journal ---------- */
   function buildJournal() {
@@ -253,7 +328,6 @@
         <div class="j-name">${rec ? sp.name : "？？？"}</div>
         <div class="j-sub">${rec ? rec.count + " 尾 · " + rec.best + " kg" : rmeta.label}</div>
       `;
-      if (rec) cell.addEventListener("click", () => toast(`${sp.name}｜${sp.poem}`, 2800));
       els.journalGrid.appendChild(cell);
     }
     els.journalStats.textContent =
@@ -268,17 +342,16 @@
     els.journal.classList.remove("open");
   }
 
-  /* ---------- catch card：剪影 + 斑纹 ---------- */
+  /* ---------- catch card ---------- */
   function paintCardFish(sp) {
     const c1 = sp.colors[0], c2 = sp.colors[1];
     const spots = (sp.id.length % 3) + 1;
     let blobs = "";
     for (let i = 0; i < spots; i++) {
-      const cx = 48 + i * 16 + (sp.id.charCodeAt(i % sp.id.length) % 8);
-      const cy = 24 + (i % 2) * 8;
-      blobs += `<ellipse cx="${cx}" cy="${cy}" rx="${7 + i * 1.5}" ry="${5 + i * 0.8}" fill="${c2}" opacity=".5"/>`;
+      const cx = 40 + i * 22 + (sp.id.charCodeAt(i % sp.id.length) % 10);
+      const cy = 22 + (i % 2) * 10;
+      blobs += `<ellipse cx="${cx}" cy="${cy}" rx="${8 + i * 2}" ry="${5 + i}" fill="${c2}" opacity=".55"/>`;
     }
-    // 圆润鱼身 + 叉尾 + 双鳍
     els.cardFish.innerHTML = `
       <defs>
         <linearGradient id="cfG" x1="0" y1="0" x2="0" y2="1">
@@ -286,17 +359,14 @@
           <stop offset="100%" stop-color="${c2}"/>
         </linearGradient>
         <clipPath id="cfC">
-          <ellipse cx="62" cy="28" rx="34" ry="16"/>
+          <path d="M18 28 C28 10 55 6 78 14 C92 20 100 24 108 28 C100 32 92 36 78 42 C55 50 28 46 18 28 Z"/>
         </clipPath>
       </defs>
-      <path d="M28 28 L10 14 C16 22 16 34 10 42 Z" fill="${c2}" opacity=".8"/>
-      <path d="M62 12 L54 4 L70 11 Z" fill="${c2}" opacity=".65"/>
-      <path d="M62 44 L54 52 L70 45 Z" fill="${c2}" opacity=".65"/>
-      <ellipse cx="62" cy="28" rx="34" ry="16" fill="url(#cfG)" stroke="${c2}" stroke-width="1"/>
+      <path d="M18 28 C28 10 55 6 78 14 C92 20 100 24 108 28 C100 32 92 36 78 42 C55 50 28 46 18 28 Z"
+        fill="url(#cfG)" stroke="${c2}" stroke-width="1"/>
+      <path d="M18 28 L4 14 L10 28 L4 42 Z" fill="${c2}" opacity=".75"/>
       <g clip-path="url(#cfC)">${blobs}</g>
-      <circle cx="84" cy="24" r="2.4" fill="#2a4554" opacity=".75"/>
-      <circle cx="84.7" cy="23.3" r="0.8" fill="#fff" opacity=".7"/>
-      <path d="M28 28 Q45 26 58 28" stroke="${c2}" stroke-width=".8" fill="none" opacity=".35"/>
+      <circle cx="88" cy="24" r="2.2" fill="#2c4a58" opacity=".7"/>
     `;
   }
 
@@ -304,15 +374,28 @@
     const sp = fish.sp;
     const rmeta = Fishing.getRarityMeta(sp.rarity);
     els.cardRarity.textContent = rmeta.label;
-    els.cardRarity.style.color = rmeta.color;
+    els.cardRarity.style.setProperty("--seal", rmeta.color);
+    const rec = save.records[sp.id];
+    if (!rec || rec.count === 0) {
+      els.cardBadge.textContent = "初见";
+      els.cardBadge.hidden = false;
+    } else if (fish.weight > save.bestWeight) {
+      els.cardBadge.textContent = "新记";
+      els.cardBadge.hidden = false;
+    } else {
+      els.cardBadge.hidden = true;
+    }
     els.cardName.textContent = sp.name;
     els.cardMeta.textContent = `${fish.weight} kg · ${fish.size} cm · ${Fishing.st.bait.name}`;
     els.cardPoem.textContent = sp.poem;
     paintCardFish(sp);
+    els.card.classList.remove("leave");
     els.card.classList.add("show");
   }
+
   function hideCard() {
-    els.card.classList.remove("show");
+    els.card.classList.add("leave");
+    setTimeout(() => els.card.classList.remove("show", "leave"), 280);
   }
 
   function recordKeep(fish) {
@@ -332,118 +415,114 @@
     persist();
   }
 
-  /* ---------- panels ---------- */
+  function sinkButton(el) {
+    el.animate(
+      [{ transform: "translateY(0)" }, { transform: "translateY(2px)" }, { transform: "translateY(0)" }],
+      { duration: 220, easing: "ease-out" }
+    );
+  }
+
+  /* ---------- panels：状态只用器物与按钮表达，不飘字 ---------- */
   function paintPanels(st) {
     const idle = st.state === Fishing.S.IDLE;
     els.castPanel.classList.toggle("show", idle);
-    els.actionBtn.hidden = idle || st.state === Fishing.S.CAUGHT;
-
-    const map = {
-      [Fishing.S.CASTING]: "……",
-      [Fishing.S.WAITING]: "收回",
-      [Fishing.S.NIBBLE]: "有试探 · 别提",
-      [Fishing.S.BITE]: "扬竿！",
-      [Fishing.S.FIGHTING]: "按住收线",
-      [Fishing.S.CAUGHT]: "看看渔获",
-    };
-    els.actionBtn.textContent = map[st.state] || "";
-    els.actionBtn.className =
-      "action-btn " +
-      (st.state === Fishing.S.BITE || st.state === Fishing.S.FIGHTING ? "urgent" :
-       st.state === Fishing.S.NIBBLE ? "wait" : "");
-  }
-
-  const HINTS = {
-    idle: "拨竹尺定方向，卷线轮蓄力，落进亮环更妙",
-    waiting: "浮漂静了……",
-    nibble: "水下试探，先别提",
-    bite: "就是现在",
-    fight: "按住收线，过紧就松",
-    caught: "一尾入网",
-  };
-  function setHint(k) {
-    els.hint.textContent = HINTS[k] || HINTS.idle;
-    els.hint.classList.remove("pulse");
-    void els.hint.offsetWidth;
-    els.hint.classList.add("pulse");
+    els.retractBtn.hidden = st.state !== Fishing.S.WAITING;
+    els.actionBtn.hidden = st.state !== Fishing.S.BITE;
+    els.actionBtn.textContent = "扬竿";
+    els.actionBtn.className = "action-btn" + (st.state === Fishing.S.BITE ? " urgent" : "");
+    els.tensionWrap.classList.toggle("show", st.state === Fishing.S.FIGHTING);
+    els.dock.classList.toggle("card-mode", st.state === Fishing.S.CAUGHT);
+    if (!idle) {
+      // 离开待机就收掉扇面与暗角，不留残影
+      aiming = false;
+      clearFan();
+    }
   }
 
   /* ---------- fishing events ---------- */
   Fishing.onEvent = (type, data) => {
     switch (type) {
       case "bait":
-        paintBait(data.bait);
-        if (!data.silent) toast(`换上${data.bait.name}`, 1400);
+        paintBait(data.bait, data.silent);
         break;
       case "zen":
         paintZen(data.zen);
         break;
-      case "cast": {
-        setHint("waiting");
-        if (window.Tackle) {
-          const tip = { x: Fishing.st.rodX, y: Fishing.st.rodY };
-          Tackle.startFlight(tip, { x: data.x, y: data.y, dist: Math.hypot(data.x - tip.x, data.y - tip.y) });
-          Tackle.setBait(baitSvgOf(save.bait));
-        }
-        if (data.grade === "sweet") toast("顺风一抛", 1500);
-        else if (data.grade === "poor") toast("散了窝", 1200);
-        else toast("漂已落水", 1200);
-        break;
-      }
       case "waiting":
-        setHint("waiting");
+        waitFull = Math.max(0.1, Fishing.st.waitTimer);
         if (window.Tackle) Tackle.setPhase("wait");
         break;
       case "nibble":
       case "nibbleTick":
-        setHint("nibble");
         if (window.Tackle) Tackle.setPhase("wait");
         break;
       case "bite":
-        setHint("bite");
-        toast("咬钩", 1000);
-        if (window.Tackle) Tackle.setPhase("cast");
+        if (window.Tackle) {
+          Tackle.setPhase("bite");
+          Tackle.setShadow("lunge");
+          Tackle.splashRing(Fishing.st.lineX, Fishing.st.lineY);
+        }
         break;
       case "fight":
-        setHint("fight");
-        if (window.Tackle) Tackle.setPhase("fight", Fishing.st.tension);
+        if (window.Tackle) {
+          Tackle.setPhase("fight", Fishing.st.tension);
+          Tackle.setShadow("fight");
+        }
         break;
       case "blank":
-        toast("空空如也", 1100);
+        if (window.Tackle) Tackle.setPhase("wait");
         break;
       case "escaped":
-        if (window.Tackle) Tackle.hide();
         hideCard();
-        setHint("idle");
-        toast(data.text || "游走了", 1800);
-        rerollSweet();
+        fanHoldUntil = performance.now() + 800;
+        if (window.Water && data.from === "fight") {
+          // 断线的"崩"：大水花标在断点
+          Water.addDrop(Fishing.st.lineX, Fishing.st.lineY, 30, 1.2);
+        }
+        if (window.Tackle) {
+          if (data.from !== "bite") Tackle.setShadow("flee");
+          // 咬钩脱钩先看它吐钩回弹，遛鱼失败喘半拍，再收线
+          const delay = data.from === "fight" ? 500 : data.from === "bite" ? 350 : 80;
+          setTimeout(() => Tackle.startReelIn(), delay);
+        }
         break;
       case "retract":
-        if (window.Tackle) Tackle.hide();
-        setHint("idle");
-        rerollSweet();
+        fanHoldUntil = performance.now() + 800;
+        if (window.Tackle) {
+          Tackle.setShadow("off");
+          Tackle.startReelIn();
+        }
         break;
       case "caught":
         if (window.Tackle) {
           Tackle.show(Fishing.st.lineX, Fishing.st.lineY);
           Tackle.setPhase("wait");
+          Tackle.setShadow("leap");
         }
-        showCard(data.fish);
-        setHint("caught");
+        setTimeout(() => showCard(data.fish), 420);
         break;
       case "kept":
-        if (window.Tackle) Tackle.hide();
-        hideCard();
-        setHint("idle");
-        toast("收进篓篓", 1400);
-        rerollSweet();
+        sinkButton(els.btnKeep);
+        setTimeout(() => {
+          if (window.Tackle) {
+            Tackle.setShadow("off");
+            Tackle.startReelIn();
+          }
+          hideCard();
+          rerollSweet();
+        }, 140);
         break;
       case "released":
-        if (window.Tackle) Tackle.hide();
-        hideCard();
-        setHint("idle");
-        toast("放归池中 · 静心 +5", 1500);
-        rerollSweet();
+        sinkButton(els.btnRelease);
+        flyBead(els.btnRelease);
+        setTimeout(() => {
+          if (window.Tackle) {
+            Tackle.setShadow("off");
+            Tackle.startReelIn();
+          }
+          hideCard();
+          rerollSweet();
+        }, 140);
         break;
       default:
         break;
@@ -453,66 +532,107 @@
 
   /* ---------- input ---------- */
   function isUiTarget(e) {
-    return e.target.closest(".hud, .panel, .card, .roller");
-  }
-
-  function doCast() {
-    if (Fishing.st.state !== Fishing.S.IDLE) return;
-    Fishing.cast(castDir, castPow);
+    return e.target.closest(".hud, .panel, .card, .bait-chip, .action-btn, .cast-handle, .retract-btn");
   }
 
   function onPointerDown(e) {
     if (isUiTarget(e)) return;
     const st = Fishing.st;
-    if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) {
+    const onBobber = !!(e.target.closest && e.target.closest("#bobber"));
+    if (st.state === Fishing.S.BITE) {
       Fishing.hook();
+      return;
+    }
+    if (st.state === Fishing.S.NIBBLE) {
+      // 只有碰到浮漂才算扬竿，别处点水不惊鱼
+      if (onBobber) Fishing.hook();
+      else if (window.Water) Water.addDrop(e.clientX, e.clientY, 5, 0.1);
+      return;
+    }
+    if (st.state === Fishing.S.WAITING) {
+      // 等待期点水只起涟漪；收线只认角落的收线钮
+      if (window.Water) Water.addDrop(e.clientX, e.clientY, 6, 0.14);
       return;
     }
     if (st.state === Fishing.S.FIGHTING) {
       Fishing.setReeling(true);
       return;
     }
-    if (st.state === Fishing.S.WAITING) {
-      Fishing.retract();
-      return;
-    }
-    if (st.state === Fishing.S.IDLE && window.Water) {
-      Water.addDrop(e.clientX, e.clientY, 8, 0.12);
+    if (st.state === Fishing.S.IDLE) {
+      if (window.Tackle && Tackle.reeling) {
+        if (window.Water) Water.addDrop(e.clientX, e.clientY, 6, 0.14);
+        return;
+      }
+      // 按下先不进入瞄准：拖动超过阈值才算"要抛"，短点只起涟漪
+      press = { x: e.clientX, y: e.clientY };
     }
   }
 
-  function onPointerUp() {
+  function onPointerMove(e) {
+    if (aiming) {
+      moveAim(e.clientX, e.clientY);
+      return;
+    }
+    if (press && Fishing.st.state === Fishing.S.IDLE &&
+        Math.hypot(e.clientX - press.x, e.clientY - press.y) > 24) {
+      startAim(e.clientX, e.clientY);
+    }
+  }
+
+  function onPointerUp(e) {
     Fishing.setReeling(false);
+    if (aiming) {
+      press = null;
+      endAim(e.clientX, e.clientY);
+      return;
+    }
+    if (press) {
+      // 短点击：只应一句涟漪，不抛竿
+      if (window.Water) Water.addDrop(e.clientX, e.clientY, 7, 0.18);
+      press = null;
+    }
   }
 
   window.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
-  window.addEventListener("pointercancel", onPointerUp);
-
-  let lastMove = null;
-  window.addEventListener("pointermove", (e) => {
-    if (isUiTarget(e)) return;
-    if (lastMove && window.Water && Fishing.st.state === Fishing.S.IDLE) {
-      const speed = Math.hypot(e.clientX - lastMove.x, e.clientY - lastMove.y);
-      if (speed > 18) {
-        Water.addDrop(e.clientX, e.clientY, 7 + speed * 0.05, Math.min(0.1, 0.02 + speed * 0.001));
-      }
-    }
-    lastMove = { x: e.clientX, y: e.clientY };
-  }, { passive: true });
-
-  els.tensionPad.addEventListener("pointerdown", (e) => {
-    e.stopPropagation();
-    Fishing.setReeling(true);
+  window.addEventListener("pointercancel", (e) => {
+    Fishing.setReeling(false);
+    press = null;
+    if (aiming) cancelAim();
   });
+
   els.tensionWrap.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
     Fishing.setReeling(true);
   });
 
-  els.castBtn.addEventListener("click", (e) => {
+  // 抛竿钮：点按抛向池心；按住则进入瞄准、拖到水面松手抛出
+  els.castBtn.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
-    doCast();
+    if (Fishing.st.state !== Fishing.S.IDLE) return;
+    if (aiming) return;
+    startAim(e.clientX, e.clientY);
+  });
+  els.castBtn.addEventListener("pointerup", (e) => {
+    e.stopPropagation();
+    if (aiming) {
+      if (!aimMoved) {
+        // 原地点按：抛向池心
+        aiming = false;
+        clearFan();
+        castTo(innerWidth * 0.45, innerHeight * 0.4);
+      } else {
+        endAim(e.clientX, e.clientY);
+      }
+    } else if (Fishing.st.state === Fishing.S.IDLE) {
+      castTo(innerWidth * 0.45, innerHeight * 0.4);
+    }
+  });
+
+  els.retractBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    Fishing.retract();
   });
 
   els.actionBtn.addEventListener("pointerdown", (e) => {
@@ -520,7 +640,6 @@
     const st = Fishing.st;
     if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) Fishing.hook();
     else if (st.state === Fishing.S.FIGHTING) Fishing.setReeling(true);
-    else if (st.state === Fishing.S.WAITING) Fishing.retract();
   });
   els.actionBtn.addEventListener("pointerup", (e) => {
     e.stopPropagation();
@@ -563,7 +682,7 @@
     if (e.code === "Space") {
       e.preventDefault();
       const st = Fishing.st;
-      if (st.state === Fishing.S.IDLE) doCast();
+      if (st.state === Fishing.S.IDLE) castTo(innerWidth * 0.45, innerHeight * 0.4);
       else if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) Fishing.hook();
       else if (st.state === Fishing.S.FIGHTING) Fishing.setReeling(true);
     }
@@ -582,23 +701,40 @@
     Fishing.setBait(save.bait || "worm", true);
     Fishing.st.zen = save.zen;
     paintZen(Fishing.st.zen);
-    Fishing.setCastAim(castDir, castPow);
-    applyAim(true);
-    setHint("idle");
+    // 默认瞄准池心
+    aim = Fishing.aimFromPointer(innerWidth * 0.45, innerHeight * 0.4);
+    paintFan(true);
     paintPanels(Fishing.st);
   }
 
   function frame(now, dt) {
     const st = Fishing.st;
     if (window.Tackle) {
-      if (st.state === Fishing.S.FIGHTING) Tackle.setPhase("fight", st.tension);
-      if (window.Tackle) Tackle.setDip(st.bobberDip || 0);
-      // 未抛出时也画空闲竿
-      if (!Tackle.visible && st.state === Fishing.S.IDLE) Tackle.setPhase("idle");
+      if (st.state === Fishing.S.FIGHTING) {
+        Tackle.setPhase("fight", st.tension);
+        els.reelNeedle.setAttribute("transform", `rotate(${(-120 + st.tension * 240).toFixed(1)} 48 48)`);
+        els.tensionWrap.classList.toggle("danger", st.tension > 0.78 || st.tension < 0.25);
+      }
+      Tackle.setDip(st.bobberDip || 0);
+      if (!Tackle.visible && !Tackle.animating && !Tackle.reeling && st.state === Fishing.S.IDLE) {
+        Tackle.setPhase("idle");
+      }
       Tackle.update(dt);
+      // 鱼影随等待进度三段渐近：远处巡游 → 靠近 → 悬在饵旁；
+      // 试探/咬钩/遛鱼各有相位，扑食/出水/逃逸是一次性事件
+      const waitProg = waitFull > 0 ? 1 - st.waitTimer / waitFull : 1;
+      const want =
+        st.state === Fishing.S.WAITING ? (waitProg > 0.8 ? "near" : waitProg > 0.4 ? "approach" : "cruise") :
+        st.state === Fishing.S.NIBBLE ? "circle" :
+        st.state === Fishing.S.FIGHTING ? "fight" : null;
+      if (want && Tackle.shadowMode !== want) Tackle.setShadow(want);
+    }
+    if (st.state === Fishing.S.IDLE && !aiming && performance.now() > fanHoldUntil) {
+      if (!aim) aim = Fishing.aimFromPointer(innerWidth * 0.45, innerHeight * 0.4);
+      paintFan();
     }
   }
 
-  window.App = { boot, frame, toast };
+  window.App = { boot, frame };
   boot();
 })();

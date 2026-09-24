@@ -61,6 +61,9 @@
     legend: { label: "传说", weight: 0.8, color: "#c08bb8" },
   };
 
+  // 咬钩窗口；上浮段就是"窗口将尽"的视觉信号，用运动代替倒计时
+  const BITE_WINDOW = 1.6;
+
   const S = {
     IDLE: "IDLE",
     CASTING: "CASTING",
@@ -104,10 +107,10 @@
     return { dir: st.castDir, pow: st.castPow };
   }
 
-  // 由方向/能量算落点：杆在右下，向池心抛
+  // 由方向/能量算落点：杆在右下，向池心抛（竿尖探入画面，扇面与竿同源）
   function aimToXY(dir, pow) {
-    const rx = innerWidth > 720 ? innerWidth - 36 : innerWidth * 0.88;
-    const ry = innerHeight > 640 ? innerHeight - 28 : innerHeight * 0.92;
+    const rx = innerWidth > 720 ? innerWidth - 140 : innerWidth * 0.74;
+    const ry = innerHeight > 640 ? innerHeight - 120 : innerHeight * 0.8;
     // 左 → 上偏右的扇面，避免贴底或抛出画面
     const ang = (208 + dir * 88) * Math.PI / 180;
     const maxD = Math.min(innerWidth, innerHeight) * 0.78;
@@ -120,15 +123,6 @@
     // 落点控制在水域中段
     y = Math.max(innerHeight * 0.12, Math.min(y, innerHeight * 0.68));
     return { x, y, ang, dist, rx, ry };
-  }
-
-  function setBait(id, silent) {
-    if (st.state !== S.IDLE && st.state !== S.CAUGHT) return false;
-    const b = BAITS.find((x) => x.id === id);
-    if (!b) return false;
-    st.bait = b;
-    emit("bait", { bait: b, silent: !!silent });
-    return true;
   }
 
   function zenAdd(v) {
@@ -189,20 +183,53 @@
     return Math.abs(pow - mid) > 0.22 ? "poor" : "ok";
   }
 
-  // 按当前方向/能量抛竿
-  function cast(dir, pow) {
+  // 从杆尖到指针：返回合法落点（扇面内）
+  function aimFromPointer(px, py) {
+    const rx = innerWidth > 720 ? innerWidth - 140 : innerWidth * 0.74;
+    const ry = innerHeight > 640 ? innerHeight - 120 : innerHeight * 0.8;
+    const dx = px - rx, dy = py - ry;
+    let ang = Math.atan2(dy, dx);
+    // 屏幕坐标：左 180°、上 270°。扇面限制在 195°–305°
+    const minA = 195 * Math.PI / 180;
+    const maxA = 305 * Math.PI / 180;
+    // 角度可能落在 -π..π，归一到 0..2π 再夹
+    let deg = ang;
+    if (deg < 0) deg += Math.PI * 2;
+    deg = Math.max(minA, Math.min(maxA, deg));
+    ang = deg;
+    const maxD = Math.min(innerWidth, innerHeight) * 0.82;
+    const minD = maxD * 0.18;
+    let dist = Math.hypot(dx, dy);
+    dist = Math.max(minD, Math.min(maxD, dist));
+    const x = rx + Math.cos(ang) * dist;
+    const y = ry + Math.sin(ang) * dist;
+    const pow = (dist - minD) / (maxD - minD); // 0..1
+    return { x, y, ang, dist, pow, rx, ry, minD, maxD };
+  }
+
+  function setBait(id, silent) {
+    if (st.state !== S.IDLE && st.state !== S.CAUGHT) return false;
+    const b = BAITS.find((x) => x.id === id);
+    if (!b) return false;
+    st.bait = b;
+    emit("bait", { bait: b, silent: !!silent });
+    return true;
+  }
+
+  // 扇面拖抛：按落点抛竿
+  function castPoint(px, py) {
     if (st.state !== S.IDLE && st.state !== S.CAUGHT) return false;
     const now = performance.now();
-    if (now - st.lastCastAt < 400) return false;
-    if (dir != null) st.castDir = Math.max(0, Math.min(1, dir));
-    if (pow != null) st.castPow = Math.max(0.18, Math.min(1, pow));
-    const aim = aimToXY(st.castDir, st.castPow);
-    const grade = gradeCast(st.castPow);
+    if (now - st.lastCastAt < 350) return false;
+    const aim = aimFromPointer(px, py);
+    const grade = gradeCast(aim.pow);
     st.lastCastAt = now;
     st.lineX = aim.x;
     st.lineY = aim.y;
     st.rodX = aim.rx;
     st.rodY = aim.ry;
+    st.castDir = (aim.ang - 195 * Math.PI / 180) / (110 * Math.PI / 180);
+    st.castPow = aim.pow;
     st.state = S.CASTING;
     st.bobberDip = 0;
     st.tension = 0.35;
@@ -211,25 +238,31 @@
     st.castGrade = grade;
     zenAdd(grade === "sweet" ? 0 : -1);
     const splash = grade === "sweet" ? 0.55 : grade === "poor" ? 1.0 : 0.75;
-    if (window.Water) Water.addDrop(aim.x, aim.y, (18 + st.castPow * 16) * splash, (0.7 + st.castPow * 0.5) * splash);
+    if (window.Water) {
+      setTimeout(() => {
+        Water.addDrop(aim.x, aim.y, (16 + aim.pow * 14) * splash, (0.6 + aim.pow * 0.5) * splash);
+        if (grade === "sweet") Water.addDrop(aim.x + 8, aim.y - 4, 10, 0.2);
+      }, 500);
+    }
     if (window.Life) Life.startleKoi(aim.x, aim.y);
-    emit("cast", { x: aim.x, y: aim.y, pow: st.castPow, grade });
+    emit("cast", { x: aim.x, y: aim.y, pow: aim.pow, grade, rx: aim.rx, ry: aim.ry });
     setTimeout(() => {
       if (st.state !== S.CASTING) return;
       st.state = S.WAITING;
       st.waitTimer = waitDuration();
       if (window.Life) Life.attractKoi(st.lineX, st.lineY, grade === "sweet" ? 0.55 : 0.35);
       emit("waiting", {});
-    }, 420);
+    }, 640);
     return true;
   }
 
   function retract() {
     if (st.state === S.CAUGHT || st.state === S.IDLE) return;
+    st.bobberDip = 0;
     if (st.state === S.FIGHTING) {
       // 主动收线失败也温柔
       st.state = S.IDLE;
-      emit("escaped", { text: "线松了，它缓缓游开。" });
+      emit("escaped", { text: "线松了，它缓缓游开。", from: "fight" });
       return;
     }
     st.state = S.IDLE;
@@ -240,9 +273,10 @@
   function hook() {
     if (st.state === S.NIBBLE) {
       st.state = S.IDLE;
+      st.bobberDip = 0;
       zenAdd(-6);
       if (window.Water) Water.addDrop(st.lineX, st.lineY, 18, 0.5);
-      emit("escaped", { text: "扬竿早了，水花一散。" });
+      emit("escaped", { text: "扬竿早了，水花一散。", from: "nibble" });
       return;
     }
     if (st.state === S.BITE) {
@@ -288,8 +322,9 @@
       if (st.slackBad > 1.4) {
         st.state = S.IDLE;
         st.slackBad = 0;
+        st.bobberDip = 0;
         zenAdd(-4);
-        emit("escaped", { text: "手感不对，它借力走了。" });
+        emit("escaped", { text: "手感不对，它借力走了。", from: "fight" });
         return;
       }
     } else {
@@ -347,7 +382,7 @@
           st.nibbleLeft -= 1;
           if (st.nibbleLeft <= 0) {
             st.state = S.BITE;
-            st.biteTimer = 1.6;
+            st.biteTimer = BITE_WINDOW;
             st.bobberDip = 1.5;
             st.pendingFish = rollFish();
             if (window.Water) Water.addDrop(st.lineX, st.lineY, 16, 0.7);
@@ -363,11 +398,17 @@
       }
       case S.BITE: {
         st.biteTimer -= dt;
-        st.bobberDip = Math.max(0.4, st.bobberDip - dt * 0.3);
+        // 三拍：快沉没顶 → 按住 → 上浮
+        const gone = BITE_WINDOW - Math.max(0, st.biteTimer);
+        if (gone < 0.25) st.bobberDip = 1.5 + (gone / 0.25) * 2.7;
+        else if (gone < 1.1) st.bobberDip = 4.2;
+        else st.bobberDip = Math.max(0.9, 4.2 - ((gone - 1.1) / 0.5) * 3.3);
         if (st.biteTimer <= 0) {
           st.state = S.IDLE;
+          st.bobberDip = 0;
           zenAdd(-3);
-          emit("escaped", { text: "没提竿……它吐钩走了。" });
+          if (window.Water) Water.addDrop(st.lineX, st.lineY, 14, 0.5);
+          emit("escaped", { text: "没提竿……它吐钩走了。", from: "bite" });
         }
         break;
       }
@@ -394,7 +435,8 @@
     setBait,
     setCastAim,
     aimToXY,
-    cast,
+    aimFromPointer,
+    castPoint,
     retract,
     hook,
     setReeling,

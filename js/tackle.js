@@ -1,69 +1,73 @@
-/* 钓具层：竿 / 线 / 漂 / 钩饵，DOM 复用只改属性。导出 Tackle */
+/* 钓具层：墨线竿 / 线 / 漂 / 抛竿分镜 / 收线动画 / 鱼影。导出 Tackle */
 (function () {
   "use strict";
 
   const layer = document.getElementById("lineLayer");
   const bobber = document.getElementById("bobber");
   const hookBait = document.getElementById("hookBait");
+  const shadowEl = document.getElementById("fishShadow");
 
-  // 一次性建 SVG 骨架，之后只改 d / 变换
   layer.innerHTML = `
     <svg id="tackleSvg" width="100%" height="100%" style="position:absolute;inset:0">
       <defs>
-        <linearGradient id="rodGrad" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stop-color="#5c4634"/>
-          <stop offset="35%" stop-color="#8b6b4a"/>
-          <stop offset="70%" stop-color="#a8845c"/>
-          <stop offset="100%" stop-color="#6b5340"/>
-        </linearGradient>
-        <linearGradient id="gripGrad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#3d2e22"/>
-          <stop offset="50%" stop-color="#6b5340"/>
-          <stop offset="100%" stop-color="#3d2e22"/>
+        <linearGradient id="rodFade" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stop-color="#2c4a58" stop-opacity="0.15"/>
+          <stop offset="30%" stop-color="#3d5a68"/>
+          <stop offset="100%" stop-color="#3d5a68"/>
         </linearGradient>
       </defs>
-      <!-- 竿体（弯折用 path） -->
-      <path id="rodShadow" fill="none" stroke="rgba(30,70,90,.14)" stroke-width="11" stroke-linecap="round"/>
-      <path id="rodPath" fill="none" stroke="url(#rodGrad)" stroke-width="8" stroke-linecap="round"/>
-      <path id="rodShine" fill="none" stroke="rgba(255,240,210,.4)" stroke-width="1.6" stroke-linecap="round"/>
-      <!-- 握把 -->
-      <path id="rodGrip" fill="none" stroke="url(#gripGrad)" stroke-width="12" stroke-linecap="round"/>
+      <!-- 竿影 -->
+      <path id="rodShadow" fill="none" stroke="rgba(40,70,85,.10)" stroke-width="5" stroke-linecap="round"/>
+      <!-- 竿体（墨线） -->
+      <path id="rodPath" fill="none" stroke="url(#rodFade)" stroke-width="2.6" stroke-linecap="round"/>
+      <path id="rodShine" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="0.8" stroke-linecap="round"/>
+      <!-- 短握把：瓷白 -->
+      <path id="rodGrip" fill="none" stroke="#eef5f8" stroke-width="5" stroke-linecap="round"/>
+      <path id="rodGripEdge" fill="none" stroke="rgba(44,74,88,.25)" stroke-width="0.8" stroke-linecap="round"/>
       <!-- 导环 -->
-      <circle id="guide1" r="3.4" fill="none" stroke="#d4b880" stroke-width="1.5"/>
-      <circle id="guide2" r="2.6" fill="none" stroke="#d4b880" stroke-width="1.3"/>
+      <circle id="guide1" r="2.2" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1"/>
+      <circle id="guide2" r="1.8" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="0.9"/>
+      <!-- 卷线瓷钮 -->
+      <circle id="reelDot" r="3.2" fill="#dceaf0" stroke="rgba(44,74,88,.25)" stroke-width="0.8"/>
       <!-- 钓线 -->
-      <path id="linePath" fill="none" stroke="rgba(250,246,236,.86)" stroke-width="1.2" stroke-linecap="round"/>
+      <path id="linePath" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1" stroke-linecap="round"/>
     </svg>`;
 
   const rodPath = document.getElementById("rodPath");
   const rodShine = document.getElementById("rodShine");
   const rodGrip = document.getElementById("rodGrip");
+  const rodGripEdge = document.getElementById("rodGripEdge");
   const rodShadow = document.getElementById("rodShadow");
   const linePath = document.getElementById("linePath");
   const guide1 = document.getElementById("guide1");
   const guide2 = document.getElementById("guide2");
+  const reelDot = document.getElementById("reelDot");
 
   let baitSvg = "";
   let visible = false;
-  let phase = "idle"; // idle|cast|flight|wait|fight
+  let phase = "idle";
   let tension = 0.35;
-  let bend = 0;       // 0..1 弯折
-  let bendTarget = 0;
-  let flightT = -1;   // >=0 时抛出动画
-  let flightFrom = { x: 0, y: 0 };
-  let flightTo = { x: 0, y: 0 };
-  let bobX = 0, bobY = 0;
+  let bend = 0.04;
+  let bendTarget = 0.04;
   let dip = 0;
+
+  // 抛竿分镜
+  let anim = null; // { t, from, to, dist }
+  let bobX = 0, bobY = 0;
+  let landFlash = 0;
+
+  // 收线动画：漂沿原路收回竿尖，替代"瞬间消失"
+  let reel = null; // { t, dur, fx, fy }
+  let reelFlash = 0;
 
   function rodAnchor() {
     const W = innerWidth, H = innerHeight;
-    // 右下角入画
     return {
-      bx: W - 8,
-      by: H + 6,
-      // 竿梢默认位置（IDLE）
-      tx: W > 720 ? W - 36 : W * 0.88,
-      ty: H > 640 ? H - 28 : H * 0.92,
+      bx: W + 10,
+      by: H + 12,
+      // 竿尖探入画面多一些，让"竿"看得见（扇面原点与此同源）
+      tx: W > 720 ? W - 140 : W * 0.74,
+      ty: H > 640 ? H - 120 : H * 0.8,
     };
   }
 
@@ -79,121 +83,362 @@
       bobber.classList.add("show");
       bobber.style.transform = `translate(${x}px, ${y}px)`;
     }
-    if (hookBait) hookBait.innerHTML = baitSvg;
   }
 
   function hide() {
     visible = false;
+    anim = null;
+    reel = null;
     if (bobber) bobber.classList.remove("show");
     linePath.setAttribute("d", "");
     phase = "idle";
   }
 
   function setPhase(p, t) {
+    if (reel) return;
+    if (anim && p !== "flight" && p !== "castanim") return;
     phase = p;
     if (typeof t === "number") tension = t;
     if (p === "fight") bendTarget = 0.35 + tension * 0.55;
-    else if (p === "cast") bendTarget = 0.55;
-    else if (p === "flight") bendTarget = 0.15;
+    else if (p === "windup") bendTarget = -0.55;
+    else if (p === "whip") bendTarget = 0.7;
+    else if (p === "flight") bendTarget = 0.2;
+    else if (p === "bite") bendTarget = -0.3;
     else if (p === "wait") bendTarget = 0.08;
     else bendTarget = 0.04;
   }
 
   function setDip(d) { dip = d; }
 
+  // 后摆→弹出→放线→落水
   function startFlight(from, to) {
-    flightFrom = from;
-    flightTo = to;
-    flightT = 0;
-    phase = "flight";
+    reel = null;
+    anim = {
+      t: 0,
+      from: { x: from.x, y: from.y },
+      to: { x: to.x, y: to.y },
+      dist: to.dist || Math.hypot(to.x - from.x, to.y - from.y),
+    };
     visible = true;
-    if (bobber) bobber.classList.add("show");
+    if (bobber) {
+      bobber.classList.add("show");
+      bobber.style.transform = `translate(${from.x}px, ${from.y}px)`;
+    }
+    phase = "windup";
+    bendTarget = -0.55;
+    bobX = from.x;
+    bobY = from.y;
+  }
+
+  function startReelIn() {
+    if (!visible || reel) return;
+    anim = null;
+    reel = { t: 0, dur: 0.65, fx: bobX, fy: bobY };
+    phase = "reelin";
+    bend = -0.5; // 断线/收线的第一下回弹
+    bendTarget = 0.16;
+    reelFlash = 1; // 线白闪
+  }
+
+  // 白色水花环：咬钩等关键瞬间的物态标点
+  function splashRing(x, y, big) {
+    const n = big ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        const ring = document.createElement("div");
+        ring.className = "bite-ring";
+        ring.style.left = x + "px";
+        ring.style.top = y + "px";
+        document.body.appendChild(ring);
+        ring.animate([
+          { transform: "translate(-50%,-50%) scale(.25)", opacity: .95 },
+          { transform: `translate(-50%,-50%) scale(${big ? 2.2 : 1.5})`, opacity: 0 },
+        ], { duration: 620, easing: "cubic-bezier(.2,.8,.2,1)" }).onfinish = () => ring.remove();
+      }, i * 130);
+    }
   }
 
   function tipPosition() {
     const a = rodAnchor();
-    // 弯折：梢向内（左上）弯
-    const bendPx = bend * 28;
+    const bendPx = bend * 22;
     return {
-      x: a.tx - bendPx * 0.55,
-      y: a.ty - bendPx * 0.85,
-      gripX: a.bx - 46,
-      gripY: a.by - 42,
-      guide1X: a.tx + (a.bx - a.tx) * 0.28,
-      guide1Y: a.ty + (a.by - a.ty) * 0.28,
-      guide2X: a.tx + (a.bx - a.tx) * 0.55,
-      guide2Y: a.ty + (a.by - a.ty) * 0.55,
+      x: a.tx - bendPx * 0.7,
+      y: a.ty - bendPx * 0.7,
+      baseX: a.tx,
+      baseY: a.ty,
+      gripX: a.bx - 56,
+      gripY: a.by - 48,
     };
   }
 
+  function updateAnim(dt) {
+    if (!anim) return false;
+    anim.t += dt;
+    const t = anim.t;
+
+    // 0–0.12 后摆 | 0.12–0.22 弹出 | 0.22–0.50 飞行 | 0.50–0.62 落水
+    if (t < 0.12) {
+      phase = "windup";
+      bendTarget = -0.6;
+    } else if (t < 0.22) {
+      phase = "whip";
+      bendTarget = 0.75;
+    } else if (t < 0.5) {
+      phase = "flight";
+      bendTarget = 0.15;
+      const u = (t - 0.22) / 0.28;
+      const e = u * u * (3 - 2 * u);
+      bobX = anim.from.x + (anim.to.x - anim.from.x) * e;
+      const arc = Math.sin(u * Math.PI) * (48 + anim.dist * 0.1);
+      bobY = anim.from.y + (anim.to.y - anim.from.y) * e - arc;
+      if (bobber) bobber.style.transform = `translate(${bobX.toFixed(1)}px, ${bobY.toFixed(1)}px)`;
+    } else if (t < 0.62) {
+      phase = "land";
+      bendTarget = 0.05;
+      const u = (t - 0.5) / 0.12;
+      bobX = anim.to.x;
+      bobY = anim.to.y + Math.sin(u * Math.PI * 2) * 2.5;
+      if (bobber) bobber.style.transform = `translate(${bobX.toFixed(1)}px, ${bobY.toFixed(1)}px)`;
+      if (t >= 0.5 && landFlash < 0.01) landFlash = 1;
+    } else {
+      anim = null;
+      phase = "wait";
+      bendTarget = 0.08;
+      return true;
+    }
+    return false;
+  }
+
+  /* ---------- 鱼影：等待渐近 / 试探绕饵 / 咬钩扑食 / 遛鱼角力 / 逃逸 / 出水 ---------- */
+  let shMode = "off";
+  let shX = 0, shY = 0, shHead = 0, shOrb = 0, shT = 0, shFade = 0, shScale = 1;
+  let shLX0 = 0, shLY0 = 0, shLX1 = 0, shLY1 = 0, shFleeAng = 0;
+  let shBubble = 0;
+
+  function fishPoint() {
+    const st = window.Fishing ? Fishing.st : null;
+    return st ? { x: st.lineX, y: st.lineY } : { x: innerWidth / 2, y: innerHeight / 2 };
+  }
+
+  function setShadow(mode) {
+    if (mode === shMode) return;
+    if (mode !== "off" && shMode === "off") {
+      const p = fishPoint();
+      const ang = Math.random() * Math.PI * 2;
+      const r = 170 + Math.random() * 90;
+      shX = p.x + Math.cos(ang) * r;
+      shY = p.y + Math.sin(ang) * r;
+      shScale = 0.85 + Math.random() * 0.45;
+      shFade = 0;
+      shHead = Math.atan2(p.y - shY, p.x - shX);
+      shOrb = ang + Math.PI;
+    }
+    shT = 0;
+    if (mode === "flee") {
+      const p = fishPoint();
+      shFleeAng = Math.atan2(shY - p.y, shX - p.x) + (Math.random() - 0.5) * 0.6;
+      shHead = shFleeAng;
+    }
+    if (mode === "leap") {
+      shLX0 = shX; shLY0 = shY;
+      shLX1 = innerWidth / 2;
+      shLY1 = innerHeight - 170;
+      shHead = Math.atan2(shLY1 - shLY0, shLX1 - shLX0);
+    }
+    shMode = mode;
+  }
+
+  function steer(tx, ty, spd, dt) {
+    const dx = tx - shX, dy = ty - shY;
+    const d = Math.hypot(dx, dy);
+    if (d < 0.5) return;
+    const step = Math.min(d, spd * dt);
+    shX += dx / d * step;
+    shY += dy / d * step;
+    let da = Math.atan2(dy, dx) - shHead;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    shHead += da * Math.min(1, dt * 7);
+  }
+
+  function updateShadow(dt) {
+    shT += dt;
+    shBubble -= dt;
+    const p = fishPoint();
+    let tx = shX, ty = shY, spd = 80, steerIt = true;
+
+    if (shMode === "cruise") {
+      // 等待前段：远处巡游，只淡淡的
+      const r = 190 + Math.sin(shT * 0.5) * 24;
+      shOrb += dt * 0.4;
+      tx = p.x + Math.cos(shOrb) * r;
+      ty = p.y + Math.sin(shOrb) * r * 0.72;
+      spd = 55;
+      shFade = Math.min(0.42, shFade + dt * 0.8);
+    } else if (shMode === "approach") {
+      // 中段：缓缓靠过来
+      const u = Math.min(1, shT / 3);
+      const r = 120 * (1 - u) + 46;
+      shOrb += dt * (0.55 + u * 0.5);
+      tx = p.x + Math.cos(shOrb) * r;
+      ty = p.y + Math.sin(shOrb) * r * 0.72;
+      spd = 70 + u * 70;
+      shFade = Math.min(0.85, shFade + dt * 1.1);
+    } else if (shMode === "near") {
+      // 末段：悬在饵旁
+      const r = 40 + Math.sin(shT * 1.3) * 6;
+      shOrb += dt * 0.55;
+      tx = p.x + Math.cos(shOrb) * r;
+      ty = p.y + Math.sin(shOrb) * r * 0.72;
+      spd = 80;
+      shFade = Math.min(0.9, shFade + dt * 1.6);
+    } else if (shMode === "circle") {
+      const r = 34 + Math.sin(shT * 1.7) * 8;
+      shOrb += dt * 1.15;
+      tx = p.x + Math.cos(shOrb) * r;
+      ty = p.y + Math.sin(shOrb) * r * 0.72;
+      spd = 95;
+      shFade = Math.min(0.9, shFade + dt * 1.4);
+    } else if (shMode === "lunge") {
+      tx = p.x; ty = p.y;
+      spd = 520;
+      shFade = shT < 0.3 ? Math.min(0.9, shFade + dt * 5) : Math.max(0, 0.9 - (shT - 0.3) * 3.6);
+      if (shT > 0.95) shMode = "off";
+    } else if (shMode === "fight") {
+      const st = window.Fishing ? Fishing.st : null;
+      const surge = Math.max(0, Math.sin((st && st.fightPhase) * 2.2)) ** 2;
+      const prog = st ? st.fightProgress : 0;
+      const r = 30 + (1 - prog) * 34 + surge * 26;
+      shOrb += dt * (1.6 + surge * 3.2);
+      tx = p.x + Math.cos(shOrb) * r;
+      ty = p.y + Math.sin(shOrb) * r * 0.75;
+      spd = 120 + surge * 260;
+      shFade = Math.min(0.95, shFade + dt * 2);
+    } else if (shMode === "flee") {
+      const v = 340 + shT * 320;
+      shX += Math.cos(shFleeAng) * v * dt;
+      shY += Math.sin(shFleeAng) * v * dt;
+      shFade = Math.max(0, 0.9 - shT * 1.5);
+      steerIt = false;
+      if (shT > 0.9) shMode = "off";
+    } else if (shMode === "leap") {
+      const u = Math.min(1, shT / 0.55);
+      const e = u * u * (3 - 2 * u);
+      shX = shLX0 + (shLX1 - shLX0) * e;
+      shY = shLY0 + (shLY1 - shLY0) * e - Math.sin(u * Math.PI) * 130;
+      shFade = u < 0.82 ? 0.95 : Math.max(0, 0.95 * (1 - (u - 0.82) / 0.18));
+      steerIt = false;
+      if (u >= 1) shMode = "off";
+    } else {
+      steerIt = false;
+    }
+
+    if (steerIt) steer(tx, ty, spd, dt);
+    if (shMode === "off" && shFade > 0) shFade = Math.max(0, shFade - dt * 2.5);
+    // 鱼搅水的小泡：让"它活着"可见，也和黑锦鲤区分开
+    if (shBubble <= 0 && shFade > 0.45 && window.Water &&
+        (shMode === "circle" || shMode === "approach" || shMode === "near" || shMode === "fight")) {
+      Water.addDrop(shX, shY, 4.5, 0.12);
+      shBubble = 0.45 + Math.random() * 0.5;
+    }
+
+    if (shadowEl) {
+      shadowEl.style.opacity = shFade.toFixed(3);
+      shadowEl.style.transform =
+        `translate(${shX.toFixed(1)}px, ${shY.toFixed(1)}px) rotate(${(shHead * 180 / Math.PI).toFixed(1)}deg) scale(${shScale.toFixed(2)})`;
+    }
+  }
+
   function update(dt) {
-    bend += (bendTarget - bend) * Math.min(1, dt * 8);
-    // 张力微抖
+    if (landFlash > 0) landFlash = Math.max(0, landFlash - dt * 2.5);
+    if (reelFlash > 0) reelFlash = Math.max(0, reelFlash - dt * 2.2);
+
+    if (reel) {
+      reel.t += dt;
+      const u = Math.min(1, reel.t / reel.dur);
+      const e = u * u * (3 - 2 * u);
+      const a = rodAnchor();
+      bobX = reel.fx + (a.tx - reel.fx) * e;
+      bobY = reel.fy + (a.ty - reel.fy) * e - Math.sin(u * Math.PI) * 14;
+      if (bobber) bobber.style.transform = `translate(${bobX.toFixed(1)}px, ${bobY.toFixed(1)}px)`;
+      if (u >= 1) hide();
+    } else if (anim) {
+      updateAnim(dt);
+    } else if (visible && bobber) {
+      // 静水期：漂体随涟漪场起伏 + 环境微波；dip 让试探/咬钩直接作用于漂体
+      const nowS = performance.now() / 1000;
+      let h = 0, dxs = 0;
+      if (window.Water) {
+        const f = Water.rippleField(bobX, bobY, nowS);
+        h = f.h; dxs = f.dx;
+      }
+      const waveY = h * 30 + Math.sin(nowS * 1.35 + bobX * 0.013) * 1.4;
+      const waveR = Math.max(-1, Math.min(1, dxs * 6)) * 5 + Math.sin(nowS * 0.9) * 2.5;
+      bobber.style.transform =
+        `translate(${bobX.toFixed(1)}px, ${(bobY + dip * 6 + waveY).toFixed(1)}px) rotate(${waveR.toFixed(2)}deg)`;
+    }
+
+    updateShadow(dt);
+
+    bend += (bendTarget - bend) * Math.min(1, dt * 12);
     let extra = 0;
     if (phase === "fight") {
-      extra = Math.sin(performance.now() * 0.02) * tension * 3;
+      extra = Math.sin(performance.now() * 0.02) * tension * 2.5;
+      // 张力进入预警带，竿尖开始发抖
+      const warn = Math.max(0, (tension - 0.78) / 0.14);
+      if (warn > 0) extra += Math.sin(performance.now() * 0.13) * warn * 3.2;
     }
 
     const tip = tipPosition();
     const tipX = tip.x + extra;
     const tipY = tip.y;
+    const midX = (tipX + tip.gripX) / 2 + bend * 10;
+    const midY = (tipY + tip.gripY) / 2 + bend * 6;
 
-    // 竿体：三次曲线，弯点在 55%
-    const midX = (tipX + tip.gripX) / 2 - bend * 16;
-    const midY = (tipY + tip.gripY) / 2 - bend * 10;
     const rodD = `M${tip.gripX.toFixed(1)} ${tip.gripY.toFixed(1)} Q${midX.toFixed(1)} ${midY.toFixed(1)} ${tipX.toFixed(1)} ${tipY.toFixed(1)}`;
     rodPath.setAttribute("d", rodD);
-    rodShine.setAttribute("d", `M${(tip.gripX - 1).toFixed(1)} ${(tip.gripY - 2).toFixed(1)} Q${midX.toFixed(1)} ${(midY - 2).toFixed(1)} ${tipX.toFixed(1)} ${tipY.toFixed(1)}`);
-    rodGrip.setAttribute("d", `M${(tip.gripX + 18).toFixed(1)} ${(tip.gripY + 14).toFixed(1)} Q${(tip.gripX + 32).toFixed(1)} ${(tip.gripY + 24).toFixed(1)} ${(tip.gripX + 44).toFixed(1)} ${(tip.gripY + 34).toFixed(1)}`);
-    rodShadow.setAttribute("d", `M${(tip.gripX + 6).toFixed(1)} ${(tip.gripY + 10).toFixed(1)} Q${(midX + 6).toFixed(1)} ${(midY + 10).toFixed(1)} ${(tipX + 4).toFixed(1)} ${(tipY + 6).toFixed(1)}`);
-    guide1.setAttribute("cx", tip.guide1X.toFixed(1));
-    guide1.setAttribute("cy", tip.guide1Y.toFixed(1));
-    guide2.setAttribute("cx", tip.guide2X.toFixed(1));
-    guide2.setAttribute("cy", tip.guide2Y.toFixed(1));
+    rodShine.setAttribute("d", rodD);
+    rodShadow.setAttribute("d", `M${(tip.gripX + 3).toFixed(1)} ${(tip.gripY + 5).toFixed(1)} Q${(midX + 3).toFixed(1)} ${(midY + 5).toFixed(1)} ${(tipX + 2).toFixed(1)} ${(tipY + 4).toFixed(1)}`);
+    rodGrip.setAttribute("d", `M${(tip.gripX + 14).toFixed(1)} ${(tip.gripY + 10).toFixed(1)} Q${(tip.gripX + 22).toFixed(1)} ${(tip.gripY + 16).toFixed(1)} ${(tip.gripX + 30).toFixed(1)} ${(tip.gripY + 22).toFixed(1)}`);
+    rodGripEdge.setAttribute("d", rodGrip.getAttribute("d"));
 
-    // 落点 / 飞行
-    if (flightT >= 0) {
-      flightT += dt * 2.8;
-      const t = Math.min(1, flightT);
-      // 抛物线
-      const e = t * t * (3 - 2 * t); // smoothstep
-      bobX = flightFrom.x + (flightTo.x - flightFrom.x) * e;
-      const arc = Math.sin(t * Math.PI) * (60 + flightTo.dist * 0.08);
-      bobY = flightFrom.y + (flightTo.y - flightFrom.y) * e - arc;
-      if (bobber) bobber.style.transform = `translate(${bobX.toFixed(1)}px, ${bobY.toFixed(1)}px)`;
-      if (t >= 1) {
-        flightT = -1;
-        bobX = flightTo.x; bobY = flightTo.y;
-        setPhase("wait");
-      }
-    } else if (visible && bobber) {
-      const y = bobY + dip * 10;
-      bobber.style.transform = `translate(${bobX.toFixed(1)}px, ${y.toFixed(1)}px) scale(${(1 - dip * 0.1).toFixed(3)})`;
-    }
+    guide1.setAttribute("cx", (tipX + (tip.gripX - tipX) * 0.3).toFixed(1));
+    guide1.setAttribute("cy", (tipY + (tip.gripY - tipY) * 0.3).toFixed(1));
+    guide2.setAttribute("cx", (tipX + (tip.gripX - tipX) * 0.55).toFixed(1));
+    guide2.setAttribute("cy", (tipY + (tip.gripY - tipY) * 0.55).toFixed(1));
+    reelDot.setAttribute("cx", (tip.gripX + 8).toFixed(1));
+    reelDot.setAttribute("cy", (tip.gripY + 8).toFixed(1));
 
-    // 线：从竿梢到漂，受弯与张力
-    if (visible || phase === "fight") {
+    const showLine = visible || anim || phase === "fight";
+    if (showLine) {
       const tx = tipX, ty = tipY;
-      const bx = bobX, by = bobY + dip * 6;
-      const dist = Math.hypot(tx - bx, ty - by);
-      // 松弛垂度：张力高则绷直
-      const slack = (1 - Math.min(1, tension)) * 46 + 8;
+      const bx = bobX, by = bobY + dip * 5;
+      const dist = Math.hypot(tx - bx, ty - by) + 1;
+      const effT = phase === "reelin" ? 0.85 : tension;
+      // 越松垂得越多（1.4 次幂让低张力段下垂更明显）
+      const slack = Math.pow(1 - Math.min(1, effT), 1.4) * 70 + 6;
+      const flySlack = anim && phase === "flight" ? -18 : 0;
       const cx = (tx + bx) / 2;
-      const cy = (ty + by) / 2 + slack;
+      const cy = (ty + by) / 2 + slack + flySlack;
       linePath.setAttribute("d", `M${tx.toFixed(1)} ${ty.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`);
-      const sw = (phase === "fight" && tension > 0.8) ? 1.5 : (1.25 - Math.min(dist, 700) * 0.0006);
-      linePath.setAttribute("stroke-width", sw.toFixed(2));
-      if (phase === "fight" && tension > 0.8) {
-        linePath.setAttribute("stroke", "rgba(232,122,106,.9)");
-      } else if (phase === "fight" && tension < 0.2) {
-        linePath.setAttribute("stroke", "rgba(201,164,90,.85)");
-      } else {
-        linePath.setAttribute("stroke", "rgba(250,246,236,.82)");
+      // 线就是张力计：白 → 渐粉（预警） → 深粉（临界）；松弛时偏青
+      let ls = "rgba(255,255,255,.6)", lw = 1.15;
+      if (phase === "fight") {
+        if (tension > 0.9) { ls = "rgba(233,110,130,.95)"; lw = 1.5; }
+        else if (tension > 0.78) {
+          const u = (tension - 0.78) / 0.12;
+          ls = `rgba(${(255 - 22 * u) | 0},${(255 - 117 * u) | 0},${(255 - 101 * u) | 0},${(0.55 + 0.35 * u).toFixed(2)})`;
+          lw = 1.15 + u * 0.35;
+        } else if (tension < 0.22) { ls = "rgba(126,184,200,.8)"; lw = 0.9; }
       }
+      if (reelFlash > 0) { ls = `rgba(255,255,255,${(0.55 + 0.4 * reelFlash).toFixed(2)})`; lw = 1.2 + reelFlash * 0.5; }
+      linePath.setAttribute("stroke-width", lw.toFixed(2));
+      linePath.setAttribute("stroke", ls);
     } else {
-      // 空闲时也画短竿，暗示钓位
       linePath.setAttribute("d", "");
     }
+
+    if (hookBait && baitSvg) hookBait.innerHTML = baitSvg;
   }
 
   window.Tackle = {
@@ -203,7 +448,14 @@
     setPhase,
     setDip,
     startFlight,
+    startReelIn,
+    splashRing,
+    setShadow,
     update,
     get visible() { return visible; },
+    get animating() { return !!anim; },
+    get reeling() { return !!reel; },
+    get shadowMode() { return shMode; },
+    get landFlash() { return landFlash; },
   };
 })();

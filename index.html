@@ -10,21 +10,28 @@
   <canvas id="gl"></canvas>
 
   <div id="lineLayer"></div>
+  <div id="fishShadow" aria-hidden="true">
+    <svg viewBox="0 0 64 32">
+      <path class="fs-body" d="M58 16 C50 8 34 6 20 10 C14 11.6 10 14 10 16 C10 18 14 20.4 20 22 C34 26 50 24 58 16 Z"/>
+      <path class="fs-tail" d="M14 16 L2 8 L5 16 L2 24 Z"/>
+    </svg>
+  </div>
+  <svg id="aimFan" class="aim-fan" aria-hidden="true"></svg>
+  <div id="aimVeil" aria-hidden="true"></div>
   <div id="bobber" class="float">
+    <div class="float-hit"></div>
     <div class="float-tip"></div>
     <div class="float-body"></div>
     <div class="float-foot"></div>
     <div class="float-refl"></div>
     <div id="hookBait" class="hook-bait"></div>
   </div>
-  <div id="castGhost" class="cast-ghost"></div>
-
   <div id="mistBand" aria-hidden="true"></div>
   <header id="topBar" class="hud">
     <div class="brand">lucky的鱼塘</div>
     <div class="zen" title="静心">
       <span class="zen-label">静心</span>
-      <svg id="zenLotus" class="zen-lotus" viewBox="0 0 48 28" aria-hidden="true"></svg>
+      <div id="zenBeads" class="zen-beads"></div>
     </div>
     <div class="top-links">
       <button id="journalBtn" class="text-btn">图鉴</button>
@@ -32,58 +39,44 @@
     </div>
   </header>
 
-  <div id="hint"></div>
-  <div id="toast"></div>
+  <div id="baitTag" aria-hidden="true"></div>
 
   <div id="dock" class="hud">
     <div class="bait-row">
-      <span class="bait-preview" id="baitPreview"></span>
       <div id="baitBar" class="bait-bar"></div>
     </div>
 
-    <div id="castPanel" class="panel-wood">
-      <!-- 竹尺 · 方向 -->
-      <div class="roller-row">
-        <span class="roller-label">方向</span>
-        <div class="roller ruler" id="dirRoller" data-role="dir">
-          <div class="ruler-wood"></div>
-          <div class="ruler-marks"></div>
-          <div class="ruler-fill"></div>
-          <div class="roller-thumb wood-thumb" id="dirThumb"></div>
-        </div>
-      </div>
-      <!-- 木轮 · 能量（含甜区） -->
-      <div class="roller-row">
-        <span class="roller-label">能量</span>
-        <div class="roller spool" id="powRoller" data-role="pow">
-          <div class="spool-frame"></div>
-          <div class="spool-track"><div class="spool-line" id="powFill"></div><div class="sweet-zone" id="sweetZone"></div></div>
-          <div class="roller-thumb wood-thumb" id="powThumb"></div>
-        </div>
-      </div>
-      <button id="castBtn" class="cast-handle" title="抛竿">
-        <span class="handle-wind"></span>
+    <div id="castPanel" class="panel-ice cast-panel-ice">
+      <button id="castBtn" class="cast-handle" title="点按抛向池心，或按住水面拖动瞄准">
         <span class="handle-text">抛竿</span>
       </button>
     </div>
 
-    <div id="tensionWrap" class="panel-wood">
-      <div class="tension-head">
-        <span>手感</span>
-        <span id="tensionHint">按住收线</span>
-      </div>
-      <div class="tension-track" id="tensionPad"><div id="tensionFill"></div></div>
+    <div id="tensionWrap" class="panel-ice reel-wrap">
+      <svg id="reelGauge" viewBox="0 0 96 96" aria-hidden="true">
+        <circle class="reel-ring" cx="48" cy="48" r="40"/>
+        <path class="reel-safe" d="M18.56 31 A34 34 0 0 1 79.34 34.82"/>
+        <path class="reel-danger" d="M18.56 65 A34 34 0 0 1 14.52 53.9"/>
+        <path class="reel-danger" d="M81.48 53.9 A34 34 0 0 1 77.44 65"/>
+        <line id="reelNeedle" class="reel-needle" x1="48" y1="48" x2="48" y2="20"/>
+        <circle class="reel-hub" cx="48" cy="48" r="4.5"/>
+      </svg>
     </div>
 
     <button id="actionBtn" class="action-btn" hidden></button>
   </div>
+
+  <button id="retractBtn" class="retract-btn" hidden>收线</button>
 
   <div id="catchCard" class="card">
     <div id="cardArt">
       <div class="card-paper"></div>
       <svg id="cardFish" class="card-fish" viewBox="0 0 120 56" aria-hidden="true"></svg>
     </div>
-    <div class="card-stamp" id="cardRarity">寻常</div>
+    <div class="card-seals">
+      <span class="card-stamp" id="cardRarity">寻常</span>
+      <span class="card-badge" id="cardBadge" hidden>初见</span>
+    </div>
     <h1 id="cardName">鲫鱼</h1>
     <div id="cardMeta"></div>
     <div id="cardPoem"></div>
@@ -114,9 +107,10 @@
       </div>
       <p>一座只求慢的池塘。不必争抢，鱼来了，便接住。</p>
       <ul>
-        <li>拨<b>竹尺</b>定方向，拨<b>卷线轮</b>蓄远近；落进亮环是「顺风一抛」。</li>
-        <li>等待时浮漂会安静；试探只轻点，<b>真口</b>再扬竿。</li>
-        <li>咬钩后按住收线，过紧就松一松；绿色带最省心。</li>
+        <li><b>按住水面拖动</b>：转扇面定方向，拖远近定力度，松手抛出。</li>
+        <li>落点小漂进入亮带是顺风一抛；抛出后<b>别碰水</b>，等鱼靠岸。</li>
+        <li>鱼影绕着饵打转是试探——<b>别动它</b>；等浮漂整个没顶，立即点水扬竿。</li>
+        <li>咬钩后<b>按住轮盘</b>收线，指针出了青瓷弧就松一松。</li>
         <li>荷花近旁花运更好；静心越高，奇鱼越易现。</li>
         <li>放流积静心；收进篓篓记斤两。</li>
       </ul>
