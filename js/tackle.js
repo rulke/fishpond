@@ -1,11 +1,10 @@
-/* 钓具层：墨线竿 / 线 / 漂 / 抛竿分镜 / 收线动画 / 鱼影。导出 Tackle */
+/* 钓具层：墨线竿 / 线 / 漂 / 抛竿分镜 / 收线动画。导出 Tackle */
 (function () {
   "use strict";
 
   const layer = document.getElementById("lineLayer");
   const bobber = document.getElementById("bobber");
   const hookBait = document.getElementById("hookBait");
-  const shadowEl = document.getElementById("fishShadow");
 
   layer.innerHTML = `
     <svg id="tackleSvg" width="100%" height="100%" style="position:absolute;inset:0">
@@ -209,146 +208,6 @@
     return false;
   }
 
-  /* ---------- 鱼影：等待渐近 / 试探绕饵 / 咬钩扑食 / 遛鱼角力 / 逃逸 / 出水 ---------- */
-  let shMode = "off";
-  let shX = 0, shY = 0, shHead = 0, shOrb = 0, shT = 0, shFade = 0, shScale = 1;
-  let shLX0 = 0, shLY0 = 0, shLX1 = 0, shLY1 = 0, shFleeAng = 0;
-  let shBubble = 0;
-
-  function fishPoint() {
-    const st = window.Fishing ? Fishing.st : null;
-    return st ? { x: st.lineX, y: st.lineY } : { x: innerWidth / 2, y: innerHeight / 2 };
-  }
-
-  function setShadow(mode) {
-    if (mode === shMode) return;
-    if (mode !== "off" && shMode === "off") {
-      const p = fishPoint();
-      const ang = Math.random() * Math.PI * 2;
-      const r = 170 + Math.random() * 90;
-      shX = p.x + Math.cos(ang) * r;
-      shY = p.y + Math.sin(ang) * r;
-      shScale = 0.85 + Math.random() * 0.45;
-      shFade = 0;
-      shHead = Math.atan2(p.y - shY, p.x - shX);
-      shOrb = ang + Math.PI;
-    }
-    shT = 0;
-    if (mode === "flee") {
-      const p = fishPoint();
-      shFleeAng = Math.atan2(shY - p.y, shX - p.x) + (Math.random() - 0.5) * 0.6;
-      shHead = shFleeAng;
-    }
-    if (mode === "leap") {
-      shLX0 = shX; shLY0 = shY;
-      shLX1 = innerWidth / 2;
-      shLY1 = innerHeight - 170;
-      shHead = Math.atan2(shLY1 - shLY0, shLX1 - shLX0);
-    }
-    shMode = mode;
-  }
-
-  function steer(tx, ty, spd, dt) {
-    const dx = tx - shX, dy = ty - shY;
-    const d = Math.hypot(dx, dy);
-    if (d < 0.5) return;
-    const step = Math.min(d, spd * dt);
-    shX += dx / d * step;
-    shY += dy / d * step;
-    let da = Math.atan2(dy, dx) - shHead;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    shHead += da * Math.min(1, dt * 7);
-  }
-
-  function updateShadow(dt) {
-    shT += dt;
-    shBubble -= dt;
-    const p = fishPoint();
-    let tx = shX, ty = shY, spd = 80, steerIt = true;
-
-    if (shMode === "cruise") {
-      // 等待前段：远处巡游，只淡淡的
-      const r = 190 + Math.sin(shT * 0.5) * 24;
-      shOrb += dt * 0.4;
-      tx = p.x + Math.cos(shOrb) * r;
-      ty = p.y + Math.sin(shOrb) * r * 0.72;
-      spd = 55;
-      shFade = Math.min(0.42, shFade + dt * 0.8);
-    } else if (shMode === "approach") {
-      // 中段：缓缓靠过来
-      const u = Math.min(1, shT / 3);
-      const r = 120 * (1 - u) + 46;
-      shOrb += dt * (0.55 + u * 0.5);
-      tx = p.x + Math.cos(shOrb) * r;
-      ty = p.y + Math.sin(shOrb) * r * 0.72;
-      spd = 70 + u * 70;
-      shFade = Math.min(0.85, shFade + dt * 1.1);
-    } else if (shMode === "near") {
-      // 末段：悬在饵旁
-      const r = 40 + Math.sin(shT * 1.3) * 6;
-      shOrb += dt * 0.55;
-      tx = p.x + Math.cos(shOrb) * r;
-      ty = p.y + Math.sin(shOrb) * r * 0.72;
-      spd = 80;
-      shFade = Math.min(0.9, shFade + dt * 1.6);
-    } else if (shMode === "circle") {
-      const r = 34 + Math.sin(shT * 1.7) * 8;
-      shOrb += dt * 1.15;
-      tx = p.x + Math.cos(shOrb) * r;
-      ty = p.y + Math.sin(shOrb) * r * 0.72;
-      spd = 95;
-      shFade = Math.min(0.9, shFade + dt * 1.4);
-    } else if (shMode === "lunge") {
-      tx = p.x; ty = p.y;
-      spd = 520;
-      shFade = shT < 0.3 ? Math.min(0.9, shFade + dt * 5) : Math.max(0, 0.9 - (shT - 0.3) * 3.6);
-      if (shT > 0.95) shMode = "off";
-    } else if (shMode === "fight") {
-      const st = window.Fishing ? Fishing.st : null;
-      const surge = Math.max(0, Math.sin((st && st.fightPhase) * 2.2)) ** 2;
-      const prog = st ? st.fightProgress : 0;
-      const r = 30 + (1 - prog) * 34 + surge * 26;
-      shOrb += dt * (1.6 + surge * 3.2);
-      tx = p.x + Math.cos(shOrb) * r;
-      ty = p.y + Math.sin(shOrb) * r * 0.75;
-      spd = 120 + surge * 260;
-      shFade = Math.min(0.95, shFade + dt * 2);
-    } else if (shMode === "flee") {
-      const v = 340 + shT * 320;
-      shX += Math.cos(shFleeAng) * v * dt;
-      shY += Math.sin(shFleeAng) * v * dt;
-      shFade = Math.max(0, 0.9 - shT * 1.5);
-      steerIt = false;
-      if (shT > 0.9) shMode = "off";
-    } else if (shMode === "leap") {
-      const u = Math.min(1, shT / 0.55);
-      const e = u * u * (3 - 2 * u);
-      shX = shLX0 + (shLX1 - shLX0) * e;
-      shY = shLY0 + (shLY1 - shLY0) * e - Math.sin(u * Math.PI) * 130;
-      shFade = u < 0.82 ? 0.95 : Math.max(0, 0.95 * (1 - (u - 0.82) / 0.18));
-      steerIt = false;
-      if (u >= 1) shMode = "off";
-    } else {
-      steerIt = false;
-    }
-
-    if (steerIt) steer(tx, ty, spd, dt);
-    if (shMode === "off" && shFade > 0) shFade = Math.max(0, shFade - dt * 2.5);
-    // 鱼搅水的小泡：让"它活着"可见，也和黑锦鲤区分开
-    if (shBubble <= 0 && shFade > 0.45 && window.Water &&
-        (shMode === "circle" || shMode === "approach" || shMode === "near" || shMode === "fight")) {
-      Water.addDrop(shX, shY, 4.5, 0.12);
-      shBubble = 0.45 + Math.random() * 0.5;
-    }
-
-    if (shadowEl) {
-      shadowEl.style.opacity = shFade.toFixed(3);
-      shadowEl.style.transform =
-        `translate(${shX.toFixed(1)}px, ${shY.toFixed(1)}px) rotate(${(shHead * 180 / Math.PI).toFixed(1)}deg) scale(${shScale.toFixed(2)})`;
-    }
-  }
-
   function update(dt) {
     if (landFlash > 0) landFlash = Math.max(0, landFlash - dt * 2.5);
     if (reelFlash > 0) reelFlash = Math.max(0, reelFlash - dt * 2.2);
@@ -377,8 +236,6 @@
       bobber.style.transform =
         `translate(${bobX.toFixed(1)}px, ${(bobY + dip * 6 + waveY).toFixed(1)}px) rotate(${waveR.toFixed(2)}deg)`;
     }
-
-    updateShadow(dt);
 
     bend += (bendTarget - bend) * Math.min(1, dt * 12);
     let extra = 0;
@@ -450,12 +307,10 @@
     startFlight,
     startReelIn,
     splashRing,
-    setShadow,
     update,
     get visible() { return visible; },
     get animating() { return !!anim; },
     get reeling() { return !!reel; },
-    get shadowMode() { return shMode; },
     get landFlash() { return landFlash; },
   };
 })();

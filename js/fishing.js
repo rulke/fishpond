@@ -85,6 +85,8 @@
     nibbleTimer: 0,
     biteTimer: 0,
     waitTimer: 0,
+    biteKoi: null,     // 被指派来咬钩的塘内真鱼
+    reaskT: 0,
     pendingFish: null,
     tension: 0.35,        // 0-1
     fightProgress: 0,     // 0-1 收服进度
@@ -130,36 +132,20 @@
     emit("zen", { zen: st.zen });
   }
 
-  function rollSpecies() {
+  // 稀有鱼"愿不愿意来"：花瓣饵 + 花运 + 静心的老配方，喂给 Life 的候选筛选
+  function approachBoost() {
     const luck = (window.Life && Life.flowerLuck) ? Life.flowerLuck(st.lineX, st.lineY) : 0;
     const zenBonus = (st.zen - 50) / 50; // -1..1
-    // 过滤可用饵的鱼
-    const avail = SPECIES.filter((sp) => sp.baits.includes(st.bait.id));
-    // 稀有权重：花瓣饵 + 花运 + 静心抬升高稀有
-    const rareBoost = (st.bait.id === "petal" ? 1.5 : 1) * (1 + luck * 1.2) * (1 + Math.max(0, zenBonus) * 0.8);
-    const commonPen = 1 / rareBoost;
-    const weights = avail.map((sp) => {
-      const r = RARITY[sp.rarity];
-      let w = r.weight;
-      if (sp.rarity === "common" || sp.rarity === "mid") w *= commonPen;
-      else w *= rareBoost;
-      return w;
-    });
-    let sum = weights.reduce((a, b) => a + b, 0) || 1;
-    let t = Math.random() * sum;
-    for (let i = 0; i < avail.length; i++) {
-      t -= weights[i];
-      if (t <= 0) return avail[i];
-    }
-    return avail[avail.length - 1] || SPECIES[0];
+    return (st.bait.id === "petal" ? 1.5 : 1) * (1 + luck * 1.2) * (1 + Math.max(0, zenBonus) * 0.8);
   }
 
-  function rollFish() {
-    const sp = rollSpecies();
+  // 咬钩的鱼 = 塘里被钩住的那条；体重在该种区间内随机
+  function rollFishFor(koi) {
+    const sp = (koi && koi.spId) ? (SPECIES.find((s) => s.id === koi.spId) || SPECIES[0]) : SPECIES[0];
     const [w0, w1] = sp.weight;
     const weight = +(w0 + Math.random() * (w1 - w0)).toFixed(2);
     const size = Math.round(12 + (weight / Math.max(w1, 0.1)) * 28 + Math.random() * 6);
-    return { sp, weight, size };
+    return { sp, weight, size, koi };
   }
 
   function waitDuration() {
@@ -250,7 +236,8 @@
       if (st.state !== S.CASTING) return;
       st.state = S.WAITING;
       st.waitTimer = waitDuration();
-      if (window.Life) Life.attractKoi(st.lineX, st.lineY, grade === "sweet" ? 0.55 : 0.35);
+      st.biteKoi = null;
+      st.reaskT = 0.6;
       emit("waiting", {});
     }, 640);
     return true;
@@ -259,6 +246,7 @@
   function retract() {
     if (st.state === S.CAUGHT || st.state === S.IDLE) return;
     st.bobberDip = 0;
+    st.biteKoi = null;
     if (st.state === S.FIGHTING) {
       // 主动收线失败也温柔
       st.state = S.IDLE;
@@ -274,6 +262,7 @@
     if (st.state === S.NIBBLE) {
       st.state = S.IDLE;
       st.bobberDip = 0;
+      st.biteKoi = null;
       zenAdd(-6);
       if (window.Water) Water.addDrop(st.lineX, st.lineY, 18, 0.5);
       emit("escaped", { text: "扬竿早了，水花一散。", from: "nibble" });
@@ -323,6 +312,7 @@
         st.state = S.IDLE;
         st.slackBad = 0;
         st.bobberDip = 0;
+        st.biteKoi = null;
         zenAdd(-4);
         emit("escaped", { text: "手感不对，它借力走了。", from: "fight" });
         return;
@@ -350,6 +340,7 @@
   function releaseCatch() {
     if (st.state !== S.CAUGHT) return;
     st.state = S.IDLE;
+    st.biteKoi = null;
     zenAdd(5);
     emit("released", { fish: st.pendingFish });
   }
@@ -357,6 +348,7 @@
   function keepCatch() {
     if (st.state !== S.CAUGHT) return;
     st.state = S.IDLE;
+    st.biteKoi = null;
     emit("kept", { fish: st.pendingFish });
   }
 
@@ -364,8 +356,17 @@
     switch (st.state) {
       case S.WAITING: {
         st.waitTimer -= dt;
-        if (window.Life && Math.random() < dt * 0.4) Life.attractKoi(st.lineX, st.lineY, 0.08);
+        // 请一位对口的真鱼来赴宴；塘里没有就在塘外安排一位
+        if (window.Life && !st.biteKoi) {
+          if (st.reaskT > 0) st.reaskT -= dt;
+          else {
+            st.biteKoi = Life.beginApproach(st.bait.id, st.lineX, st.lineY, approachBoost());
+            if (!st.biteKoi) { Life.ensureCandidate(st.bait.id); st.reaskT = 3; }
+          }
+        }
         if (st.waitTimer <= 0) {
+          // 到点仍无候选：就近请一位兜底
+          if (window.Life && !st.biteKoi) st.biteKoi = Life.assignNearest(st.lineX, st.lineY);
           st.state = S.NIBBLE;
           st.nibbleLeft = 1 + ((Math.random() * 3) | 0);
           st.nibbleTimer = 0.35 + Math.random() * 0.5;
@@ -384,9 +385,8 @@
             st.state = S.BITE;
             st.biteTimer = BITE_WINDOW;
             st.bobberDip = 1.5;
-            st.pendingFish = rollFish();
+            st.pendingFish = rollFishFor(st.biteKoi);
             if (window.Water) Water.addDrop(st.lineX, st.lineY, 16, 0.7);
-            if (window.Life) Life.attractKoi(st.lineX, st.lineY, 0.8);
             emit("bite", { fish: st.pendingFish });
           } else {
             st.nibbleTimer = 0.55 + Math.random() * 0.7;
@@ -406,6 +406,7 @@
         if (st.biteTimer <= 0) {
           st.state = S.IDLE;
           st.bobberDip = 0;
+          st.biteKoi = null;
           zenAdd(-3);
           if (window.Water) Water.addDrop(st.lineX, st.lineY, 14, 0.5);
           emit("escaped", { text: "没提竿……它吐钩走了。", from: "bite" });

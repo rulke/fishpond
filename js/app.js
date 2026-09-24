@@ -50,7 +50,6 @@
   let tagTimer = 0;
   let press = null; // IDLE 按下待判定：拖够距离才瞄准
   let fanHoldUntil = 0; // 逃鱼/收线后扇面缓一拍再回来
-  let waitFull = 0; // 本竿等待总时长，用于鱼影三段渐近
 
   try {
     const rawSweet = localStorage.getItem("fishpond_sweet");
@@ -301,6 +300,7 @@
     const ok = Fishing.castPoint(x, y);
     if (ok) {
       clearFan();
+      if (window.Life) Life.disperse();
       if (window.Tackle) {
         // 分镜落点必须用钳制后的真实落点，否则漂与鱼影/涟漪分家
         const lx = Fishing.st.lineX, ly = Fishing.st.lineY;
@@ -308,7 +308,6 @@
           x: lx, y: ly, dist: Math.hypot(lx - Fishing.st.rodX, ly - Fishing.st.rodY),
         });
         Tackle.setBait(baitSvgOf(save.bait));
-        Tackle.setShadow("off");
       }
     }
     return ok;
@@ -449,7 +448,6 @@
         paintZen(data.zen);
         break;
       case "waiting":
-        waitFull = Math.max(0.1, Fishing.st.waitTimer);
         if (window.Tackle) Tackle.setPhase("wait");
         break;
       case "nibble":
@@ -459,15 +457,13 @@
       case "bite":
         if (window.Tackle) {
           Tackle.setPhase("bite");
-          Tackle.setShadow("lunge");
           Tackle.splashRing(Fishing.st.lineX, Fishing.st.lineY);
         }
+        if (window.Life) Life.lungeBait();
         break;
       case "fight":
-        if (window.Tackle) {
-          Tackle.setPhase("fight", Fishing.st.tension);
-          Tackle.setShadow("fight");
-        }
+        if (window.Tackle) Tackle.setPhase("fight", Fishing.st.tension);
+        if (window.Life) Life.hookActive();
         break;
       case "blank":
         if (window.Tackle) Tackle.setPhase("wait");
@@ -479,8 +475,8 @@
           // 断线的"崩"：大水花标在断点
           Water.addDrop(Fishing.st.lineX, Fishing.st.lineY, 30, 1.2);
         }
+        if (window.Life) Life.fleeBait();
         if (window.Tackle) {
-          if (data.from !== "bite") Tackle.setShadow("flee");
           // 咬钩脱钩先看它吐钩回弹，遛鱼失败喘半拍，再收线
           const delay = data.from === "fight" ? 500 : data.from === "bite" ? 350 : 80;
           setTimeout(() => Tackle.startReelIn(), delay);
@@ -488,26 +484,22 @@
         break;
       case "retract":
         fanHoldUntil = performance.now() + 800;
-        if (window.Tackle) {
-          Tackle.setShadow("off");
-          Tackle.startReelIn();
-        }
+        if (window.Life) Life.disperse();
+        if (window.Tackle) Tackle.startReelIn();
         break;
       case "caught":
         if (window.Tackle) {
           Tackle.show(Fishing.st.lineX, Fishing.st.lineY);
           Tackle.setPhase("wait");
-          Tackle.setShadow("leap");
         }
+        if (window.Life) Life.leapCatch();
         setTimeout(() => showCard(data.fish), 420);
         break;
       case "kept":
         sinkButton(els.btnKeep);
+        if (window.Life) Life.removeCurrent();
         setTimeout(() => {
-          if (window.Tackle) {
-            Tackle.setShadow("off");
-            Tackle.startReelIn();
-          }
+          if (window.Tackle) Tackle.startReelIn();
           hideCard();
           rerollSweet();
         }, 140);
@@ -515,11 +507,9 @@
       case "released":
         sinkButton(els.btnRelease);
         flyBead(els.btnRelease);
+        if (window.Life) Life.releaseCurrent();
         setTimeout(() => {
-          if (window.Tackle) {
-            Tackle.setShadow("off");
-            Tackle.startReelIn();
-          }
+          if (window.Tackle) Tackle.startReelIn();
           hideCard();
           rerollSweet();
         }, 140);
@@ -720,14 +710,6 @@
         Tackle.setPhase("idle");
       }
       Tackle.update(dt);
-      // 鱼影随等待进度三段渐近：远处巡游 → 靠近 → 悬在饵旁；
-      // 试探/咬钩/遛鱼各有相位，扑食/出水/逃逸是一次性事件
-      const waitProg = waitFull > 0 ? 1 - st.waitTimer / waitFull : 1;
-      const want =
-        st.state === Fishing.S.WAITING ? (waitProg > 0.8 ? "near" : waitProg > 0.4 ? "approach" : "cruise") :
-        st.state === Fishing.S.NIBBLE ? "circle" :
-        st.state === Fishing.S.FIGHTING ? "fight" : null;
-      if (want && Tackle.shadowMode !== want) Tackle.setShadow(want);
     }
     if (st.state === Fishing.S.IDLE && !aiming && performance.now() > fanHoldUntil) {
       if (!aim) aim = Fishing.aimFromPointer(innerWidth * 0.45, innerHeight * 0.4);

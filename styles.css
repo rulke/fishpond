@@ -46,6 +46,8 @@ html, body {
   transform-origin: 30px 74px;
   animation: koiTail var(--td, 1s) ease-in-out infinite alternate;
 }
+/* 荷心精灵的小尾巴原点不同 */
+.koi.sprite .tail { transform-origin: 20px 26px; animation-name: koiTail; }
 .koi .finL {
   transform-origin: 17px 36px;
   animation: koiFin var(--td, 1s) ease-in-out infinite alternate;
@@ -139,26 +141,6 @@ html, body {
   transition: opacity .35s ease;
 }
 #aimVeil.show { opacity: 1; }
-
-/* 鱼影：水下的那一位 */
-#fishShadow {
-  position: fixed; left: -32px; top: -16px;
-  width: 64px; height: 32px;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0;
-  filter: blur(1.6px);
-  will-change: transform, opacity;
-}
-#fishShadow svg { width: 100%; height: 100%; overflow: visible; }
-/* 比黑锦鲤更沉的墨色，让玩家认得出"冲着饵来的是它" */
-.fs-body { fill: rgba(18, 40, 54, .68); }
-.fs-tail {
-  fill: rgba(18, 40, 54, .58);
-  transform-origin: 14px 16px;
-  animation: fsTail .8s ease-in-out infinite alternate;
-}
-@keyframes fsTail { from { transform: rotate(-9deg); } to { transform: rotate(11deg); } }
 
 /* 咬钩/断线瞬间的白色水花环 */
 .bite-ring {
