@@ -270,7 +270,7 @@ html, body {
   border: 1.5px solid transparent;
   background: var(--panel);
   border-radius: 50%;
-  width: 40px; height: 40px;
+  width: 46px; height: 46px;
   padding: 0;
   cursor: pointer;
   display: grid; place-items: center;
@@ -316,7 +316,7 @@ html, body {
   gap: 8px;
   flex-direction: column;
 }
-#castPanel.show, #tensionWrap.show { display: flex; }
+#tensionWrap.show { display: flex; }
 
 .roller-row {
   display: grid;
@@ -417,33 +417,27 @@ html, body {
   transform: scale(1.08);
 }
 
-.cast-panel-ice {
-  align-items: center;
+/* 首钓引导圈：池心呼吸，首竿成即退役 */
+#castHint {
+  position: fixed; left: 0; top: 0;
+  width: 60px; height: 44px;
+  margin: -22px 0 0 -30px;
+  border: 2px dashed rgba(44, 74, 88, .6);
+  border-radius: 50%;
+  background: rgba(159, 208, 220, .14);
+  z-index: 8;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .4s ease;
+  animation: hintBreath 2.2s ease-in-out infinite;
 }
-.cast-handle {
-  margin-top: 0;
-  border: 1px solid var(--edge);
-  box-shadow: inset 0 0 0 1px var(--edge-soft), var(--shadow);
-  cursor: pointer;
-  border-radius: 999px;
-  padding: 10px 28px;
-  font-family: var(--serif);
-  font-size: 13px;
-  letter-spacing: .4em;
-  text-indent: .4em;
-  background: var(--panel-solid);
-  color: var(--ink);
-  display: flex; align-items: center; justify-content: center;
-  transition: transform .1s ease, box-shadow .1s ease, background .15s ease;
+#castHint.show { opacity: 1; }
+#castHint::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 6px; height: 6px; margin: -3px 0 0 -3px;
+  border-radius: 50%; background: rgba(255, 255, 255, .8);
 }
-.cast-handle:hover { background: #fff; }
-.cast-handle:active {
-  transform: translateY(1px);
-  box-shadow: inset 0 2px 6px rgba(60, 100, 120, 0.12);
-}
-.cast-handle.dim { opacity: .55; }
-.handle-wind { display: none; }
-.handle-text { line-height: 1; }
+@keyframes hintBreath { 0%, 100% { scale: 1; } 50% { scale: 1.15; } }
 
 /* 卷线轮：遛鱼手感盘（兼按住收线的大热区） */
 .reel-wrap {
@@ -721,7 +715,7 @@ html, body {
 @media (max-width: 560px) {
   .brand { font-size: 12px; letter-spacing: .18em; }
   #journalGrid { grid-template-columns: repeat(2, 1fr); }
-  .bait-chip { width: 36px; height: 36px; }
+  .bait-chip { width: 40px; height: 40px; }
   #reelGauge { width: 78px; height: 78px; }
   #baitTag { max-width: calc(100vw - 24px); flex-wrap: wrap; }
 }

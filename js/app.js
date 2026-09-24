@@ -29,23 +29,20 @@
     helpBtn: $("helpBtn"),
     help: $("help"),
     helpClose: $("helpClose"),
-    castPanel: $("castPanel"),
-    castBtn: $("castBtn"),
     aimFan: $("aimFan"),
     aimVeil: $("aimVeil"),
     retractBtn: $("retractBtn"),
+    castHint: $("castHint"),
     dock: $("dock"),
   };
 
   const save = loadSave();
   let sweetStart = 0.42;
   const SWEET_W = 0.12;
-  let manualCasts = 0;
 
   // 拖抛瞄准
   let aiming = false;
   let aim = null; // Fishing.aimFromPointer 结果
-  let aimMoved = false;
   let fanKey = "";
   let tagTimer = 0;
   let press = null; // IDLE 按下待判定：拖够距离才瞄准
@@ -72,10 +69,11 @@
           totalCaught: p.totalCaught || 0,
           totalReleased: p.totalReleased || 0,
           bestWeight: p.bestWeight || 0,
+          hintDone: !!p.hintDone,
         };
       }
     } catch (e) { /* 坏档则重开 */ }
-    return { zen: 50, bait: "worm", records: {}, totalCaught: 0, totalReleased: 0, bestWeight: 0 };
+    return { zen: 50, bait: "worm", records: {}, totalCaught: 0, totalReleased: 0, bestWeight: 0, hintDone: false };
   }
 
   function persist() {
@@ -231,7 +229,13 @@
       </g>`;
 
     if (mode === "idle") {
-      els.aimFan.innerHTML = band(0.2, 0.45, 1.2) + preview;
+      // 待机：虚线幽灵圈示意落点，不冒充真漂
+      els.aimFan.innerHTML = `
+        ${band(0.2, 0.45, 1.2)}
+        <circle cx="${xt.toFixed(1)}" cy="${yt.toFixed(1)}" r="14" fill="none"
+          stroke="rgba(44,74,88,.55)" stroke-width="1.4" stroke-dasharray="5 5"/>
+        <circle cx="${xt.toFixed(1)}" cy="${yt.toFixed(1)}" r="2.8" fill="rgba(44,74,88,.55)"/>
+      `;
       return;
     }
 
@@ -255,7 +259,6 @@
   function startAim(x, y) {
     if (Fishing.st.state !== Fishing.S.IDLE) return;
     aiming = true;
-    aimMoved = false;
     aim = Fishing.aimFromPointer(x, y);
     els.aimVeil.classList.add("show");
     paintFan(true);
@@ -264,7 +267,6 @@
   function moveAim(x, y) {
     if (!aiming) return;
     const next = Fishing.aimFromPointer(x, y);
-    if (aim && Math.hypot(next.x - aim.x, next.y - aim.y) > 4) aimMoved = true;
     aim = next;
     paintFan();
   }
@@ -280,10 +282,6 @@
     aiming = false;
     clearFan();
     if (Fishing.st.state !== Fishing.S.IDLE) return;
-    if (aimMoved) {
-      manualCasts += 1;
-      if (manualCasts >= 3) els.castBtn.classList.add("dim");
-    }
     // 极短按则以落点为瞄准
     const target = aim || Fishing.aimFromPointer(x, y);
     castTo(target.x, target.y);
@@ -301,6 +299,7 @@
     if (ok) {
       clearFan();
       if (window.Life) Life.disperse();
+      if (!save.hintDone) { save.hintDone = true; persist(); } // 首竿成，引导圈退役
       if (window.Tackle) {
         // 分镜落点必须用钳制后的真实落点，否则漂与鱼影/涟漪分家
         const lx = Fishing.st.lineX, ly = Fishing.st.lineY;
@@ -424,7 +423,6 @@
   /* ---------- panels：状态只用器物与按钮表达，不飘字 ---------- */
   function paintPanels(st) {
     const idle = st.state === Fishing.S.IDLE;
-    els.castPanel.classList.toggle("show", idle);
     els.retractBtn.hidden = st.state !== Fishing.S.WAITING;
     els.actionBtn.hidden = st.state !== Fishing.S.BITE;
     els.actionBtn.textContent = "扬竿";
@@ -522,7 +520,7 @@
 
   /* ---------- input ---------- */
   function isUiTarget(e) {
-    return e.target.closest(".hud, .panel, .card, .bait-chip, .action-btn, .cast-handle, .retract-btn");
+    return e.target.closest(".hud, .panel, .card, .bait-chip, .action-btn, .retract-btn");
   }
 
   function onPointerDown(e) {
@@ -595,29 +593,6 @@
   els.tensionWrap.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
     Fishing.setReeling(true);
-  });
-
-  // 抛竿钮：点按抛向池心；按住则进入瞄准、拖到水面松手抛出
-  els.castBtn.addEventListener("pointerdown", (e) => {
-    e.stopPropagation();
-    if (Fishing.st.state !== Fishing.S.IDLE) return;
-    if (aiming) return;
-    startAim(e.clientX, e.clientY);
-  });
-  els.castBtn.addEventListener("pointerup", (e) => {
-    e.stopPropagation();
-    if (aiming) {
-      if (!aimMoved) {
-        // 原地点按：抛向池心
-        aiming = false;
-        clearFan();
-        castTo(innerWidth * 0.45, innerHeight * 0.4);
-      } else {
-        endAim(e.clientX, e.clientY);
-      }
-    } else if (Fishing.st.state === Fishing.S.IDLE) {
-      castTo(innerWidth * 0.45, innerHeight * 0.4);
-    }
   });
 
   els.retractBtn.addEventListener("click", (e) => {
@@ -714,6 +689,16 @@
     if (st.state === Fishing.S.IDLE && !aiming && performance.now() > fanHoldUntil) {
       if (!aim) aim = Fishing.aimFromPointer(innerWidth * 0.45, innerHeight * 0.4);
       paintFan();
+      // 首钓引导：池心呼吸圈，首竿成即退役
+      if (!save.hintDone) {
+        els.castHint.style.left = aim.x.toFixed(1) + "px";
+        els.castHint.style.top = aim.y.toFixed(1) + "px";
+        els.castHint.classList.add("show");
+      } else {
+        els.castHint.classList.remove("show");
+      }
+    } else {
+      els.castHint.classList.remove("show");
     }
   }
 
