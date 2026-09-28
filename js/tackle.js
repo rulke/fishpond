@@ -51,13 +51,16 @@
   let dip = 0;
 
   // 抛竿分镜
-  let anim = null; // { t, from, to, dist }
+  let anim = null; // { t, from, to, dist, flightDur, arcH }
   let bobX = 0, bobY = 0;
   let landFlash = 0;
 
   // 收线动画：漂沿原路收回竿尖，替代"瞬间消失"
   let reel = null; // { t, dur, fx, fy }
   let reelFlash = 0;
+
+  // 线跟随：跃出水面的鱼把线带离漂位
+  let lineFollowPt = null;
 
   function rodAnchor() {
     const W = innerWidth, H = innerHeight;
@@ -108,14 +111,17 @@
 
   function setDip(d) { dip = d; }
 
-  // 后摆→弹出→放线→落水
+  // 后摆→弹出→放线→落水；飞行时长随抛距伸缩
   function startFlight(from, to) {
     reel = null;
+    const dist = to.dist || Math.hypot(to.x - from.x, to.y - from.y);
     anim = {
       t: 0,
       from: { x: from.x, y: from.y },
       to: { x: to.x, y: to.y },
-      dist: to.dist || Math.hypot(to.x - from.x, to.y - from.y),
+      dist,
+      flightDur: 0.3 + Math.min(0.3, dist / 650 * 0.26),
+      arcH: 26 + dist * 0.16,
     };
     visible = true;
     if (bobber) {
@@ -123,10 +129,20 @@
       bobber.style.transform = `translate(${from.x}px, ${from.y}px)`;
     }
     phase = "windup";
-    bendTarget = -0.78;
+    bendTarget = -0.8;
     bobX = from.x;
     bobY = from.y;
   }
+
+  // 抛竿全程耗时（毫秒），供等待期计时器对齐分镜
+  function castDuration(dist) {
+    const fd = 0.3 + Math.min(0.3, dist / 650 * 0.26);
+    return Math.round((0.26 + fd + 0.14) * 1000);
+  }
+
+  // 钓线改跟跃出水面的鱼
+  function lineFollow(x, y) { lineFollowPt = { x, y }; }
+  function clearLineFollow() { lineFollowPt = null; }
 
   function startReelIn() {
     if (!visible || reel) return;
@@ -176,31 +192,37 @@
     if (!anim) return false;
     anim.t += dt;
     const t = anim.t;
+    const WIND = 0.18, WHIP = 0.26;
+    const F_END = WHIP + anim.flightDur;
+    const L_END = F_END + 0.14;
 
-    // 0–0.12 深后摆 | 0.12–0.22 鞭击 | 0.22–0.50 飞行 | 0.50–0.62 落水
-    if (t < 0.12) {
+    if (t < WIND) {
+      // 深后摆蓄力
       phase = "windup";
-      bendTarget = -0.78;
-    } else if (t < 0.22) {
+      bendTarget = -0.8;
+    } else if (t < WHIP) {
+      // 鞭击：竿尖猛然前甩
       phase = "whip";
-      bendTarget = 0.95;
-    } else if (t < 0.5) {
+      bendTarget = 1.0;
+    } else if (t < F_END) {
+      // 飞行：水平渐减速 + 抛物线 + 漂体空翻
       phase = "flight";
-      bendTarget = 0.15;
-      const u = (t - 0.22) / 0.28;
-      const e = u * u * (3 - 2 * u);
+      bendTarget = 0.32 - (t - WHIP) / anim.flightDur * 0.2;
+      const u = (t - WHIP) / anim.flightDur;
+      const e = 1 - (1 - u) * (1 - u);
       bobX = anim.from.x + (anim.to.x - anim.from.x) * e;
-      const arc = Math.sin(u * Math.PI) * (48 + anim.dist * 0.1);
-      bobY = anim.from.y + (anim.to.y - anim.from.y) * e - arc;
-      if (bobber) bobber.style.transform = `translate(${bobX.toFixed(1)}px, ${bobY.toFixed(1)}px)`;
-    } else if (t < 0.62) {
+      bobY = anim.from.y + (anim.to.y - anim.from.y) * e - Math.sin(u * Math.PI) * anim.arcH;
+      if (bobber) bobber.style.transform =
+        `translate(${bobX.toFixed(1)}px, ${bobY.toFixed(1)}px) rotate(${Math.round(u * 320)}deg)`;
+    } else if (t < L_END) {
+      // 落水：两次渐弱弹跳 + 水花
       phase = "land";
-      bendTarget = 0.05;
-      const u = (t - 0.5) / 0.12;
+      bendTarget = 0.06;
+      const u = (t - F_END) / 0.14;
       bobX = anim.to.x;
-      bobY = anim.to.y + Math.sin(u * Math.PI * 2) * 2.5;
+      bobY = anim.to.y + Math.abs(Math.sin(u * Math.PI * 2)) * (1 - u) * 10;
       if (bobber) bobber.style.transform = `translate(${bobX.toFixed(1)}px, ${bobY.toFixed(1)}px)`;
-      if (t >= 0.5 && landFlash < 0.01) landFlash = 1;
+      if (landFlash < 0.01) landFlash = 1;
     } else {
       anim = null;
       phase = "wait";
@@ -280,7 +302,9 @@
     const showLine = visible || anim || phase === "fight";
     if (showLine) {
       const tx = tipX, ty = tipY;
-      const bx = bobX, by = bobY + dip * 5;
+      // 线的终点：默认是漂；鱼跃出水面时改跟鱼体
+      const bx = lineFollowPt ? lineFollowPt.x : bobX;
+      const by = (lineFollowPt ? lineFollowPt.y : bobY) + dip * 5;
       const dist = Math.hypot(tx - bx, ty - by) + 1;
       const effT = phase === "reelin" ? 0.85 : tension;
       // 越松垂得越多（1.4 次幂让低张力段下垂更明显）
@@ -318,6 +342,9 @@
     startFlight,
     startReelIn,
     splashRing,
+    lineFollow,
+    clearLineFollow,
+    castDuration,
     update,
     get visible() { return visible; },
     get animating() { return !!anim; },

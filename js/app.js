@@ -183,11 +183,7 @@
   }
 
   /* ---------- 扇面拖抛 ---------- */
-  function polar(rx, ry, ang, r) {
-    return [rx + Math.cos(ang) * r, ry + Math.sin(ang) * r];
-  }
-
-  function paintFan(force) {
+  function paintAim(force) {
     const st = Fishing.st.state;
     const showAim = aim && (aiming || st === Fishing.S.IDLE);
     if (!showAim || !aim) {
@@ -196,30 +192,29 @@
       return;
     }
     const sweet = inSweet(aim.pow);
-    // 待机只留"落点小漂 + 弱光带"；按住水面才展开整面
+    // 全屏任选落点：待机只有幽灵圈，按住才有预览漂；亮带=绕竿尖的距离环
     const mode = aiming ? "aim" : "idle";
-    const key = [mode, aim.x.toFixed(1), aim.y.toFixed(1), aim.ang.toFixed(3), aim.dist.toFixed(1), sweet ? 1 : 0].join("|");
+    const key = [mode, aim.x.toFixed(1), aim.y.toFixed(1), sweet ? 1 : 0].join("|");
     if (!force && key === fanKey) return;
     fanKey = key;
 
-    const { rx, ry, ang, dist, pow, minD, maxD } = aim;
-    const spread = 14 * Math.PI / 180;
-    const a1 = ang - spread, a2 = ang + spread;
-    const rOut = maxD;
-    const [x1, y1] = polar(rx, ry, a1, rOut);
-    const [x2, y2] = polar(rx, ry, a2, rOut);
-    const [xt, yt] = polar(rx, ry, ang, dist);
-    // 甜区弧带
+    const { rx, ry, maxD } = aim;
     const s0 = sweetStart, s1 = sweetStart + SWEET_W;
-    const d0 = minD + s0 * (maxD - minD);
-    const d1 = minD + s1 * (maxD - minD);
-    const [sx1, sy1] = polar(rx, ry, a1, d0);
-    const [sx2, sy2] = polar(rx, ry, a2, d0);
-    const [sx3, sy3] = polar(rx, ry, a2, d1);
-    const [sx4, sy4] = polar(rx, ry, a1, d1);
-    const band = (fill, stroke, w) =>
-      `<path d="M${sx1} ${sy1} L${sx2} ${sy2} A${d0} ${d0} 0 0 1 ${sx3} ${sy3} L${sx4} ${sy4} A${d1} ${d1} 0 0 0 ${sx1} ${sy1} Z"
-        fill="rgba(159,208,220,${fill})" stroke="rgba(255,255,255,${stroke})" stroke-width="${w}" class="band-core"/>`;
+    const r0 = s0 * maxD, r1 = s1 * maxD;
+    const rMid = (r0 + r1) / 2;
+    // 距离甜区：绕竿尖一圈的亮带（方向不限）
+    const band = (fill, edge) => `
+      <circle cx="${rx.toFixed(1)}" cy="${ry.toFixed(1)}" r="${rMid.toFixed(1)}" fill="none"
+        stroke="rgba(159,208,220,${fill})" stroke-width="${(r1 - r0).toFixed(1)}"/>
+      <circle cx="${rx.toFixed(1)}" cy="${ry.toFixed(1)}" r="${r0.toFixed(1)}" fill="none"
+        stroke="rgba(255,255,255,${edge})" stroke-width="1"/>
+      <circle cx="${rx.toFixed(1)}" cy="${ry.toFixed(1)}" r="${r1.toFixed(1)}" fill="none"
+        stroke="rgba(255,255,255,${edge})" stroke-width="1"/>`;
+    const [xt, yt] = [aim.x, aim.y];
+    const ghost = `
+      <circle cx="${xt.toFixed(1)}" cy="${yt.toFixed(1)}" r="14" fill="none"
+        stroke="rgba(44,74,88,.55)" stroke-width="1.4" stroke-dasharray="5 5"/>
+      <circle cx="${xt.toFixed(1)}" cy="${yt.toFixed(1)}" r="2.8" fill="rgba(44,74,88,.55)"/>`;
     const preview = `
       <g class="pv-bob${sweet ? " sweet" : ""}" transform="translate(${xt.toFixed(1)} ${yt.toFixed(1)})${sweet ? " translate(0 2)" : ""}">
         <ellipse cx="0" cy="10" rx="9" ry="2.6" fill="rgba(255,255,255,.28)"/>
@@ -229,31 +224,10 @@
       </g>`;
 
     if (mode === "idle") {
-      // 待机：虚线幽灵圈示意落点，不冒充真漂
-      els.aimFan.innerHTML = `
-        ${band(0.2, 0.45, 1.2)}
-        <circle cx="${xt.toFixed(1)}" cy="${yt.toFixed(1)}" r="14" fill="none"
-          stroke="rgba(44,74,88,.55)" stroke-width="1.4" stroke-dasharray="5 5"/>
-        <circle cx="${xt.toFixed(1)}" cy="${yt.toFixed(1)}" r="2.8" fill="rgba(44,74,88,.55)"/>
-      `;
+      els.aimFan.innerHTML = band(0.12, 0.22) + ghost;
       return;
     }
-
-    // 距离刻度（瞄准态）
-    let ticks = "";
-    for (let i = 1; i <= 6; i++) {
-      const rt = minD + (maxD - minD) * (i / 7);
-      const [t1x, t1y] = polar(rx, ry, ang, rt);
-      const [t2x, t2y] = polar(rx, ry, ang, rt + 9);
-      ticks += `<line class="fan-tick" x1="${t1x.toFixed(1)}" y1="${t1y.toFixed(1)}" x2="${t2x.toFixed(1)}" y2="${t2y.toFixed(1)}"/>`;
-    }
-    els.aimFan.innerHTML = `
-      <path d="M${rx} ${ry} L${x1} ${y1} A${rOut} ${rOut} 0 0 1 ${x2} ${y2} Z"
-        fill="rgba(72,120,140,0.16)" stroke="rgba(44,74,88,0.38)" stroke-width="1.2"/>
-      ${band(sweet ? 0.52 : 0.26, sweet ? 0.95 : 0.6, 1.6)}
-      ${ticks}
-      ${preview}
-    `;
+    els.aimFan.innerHTML = band(0.28, 0.45) + preview;
   }
 
   function startAim(x, y) {
@@ -261,14 +235,14 @@
     aiming = true;
     aim = Fishing.aimFromPointer(x, y);
     els.aimVeil.classList.add("show");
-    paintFan(true);
+    paintAim(true);
   }
 
   function moveAim(x, y) {
     if (!aiming) return;
     const next = Fishing.aimFromPointer(x, y);
     aim = next;
-    paintFan();
+    paintAim();
   }
 
   function clearFan() {
@@ -515,7 +489,7 @@
           Tackle.setPhase("wait");
         }
         if (window.Life) Life.leapCatch();
-        setTimeout(() => showCard(data.fish), 420);
+        setTimeout(() => showCard(data.fish), 650);
         break;
       case "kept":
         sinkButton(els.btnKeep);
@@ -692,7 +666,7 @@
     paintZen(Fishing.st.zen);
     // 默认瞄准池心
     aim = Fishing.aimFromPointer(innerWidth * 0.45, innerHeight * 0.4);
-    paintFan(true);
+    paintAim(true);
     paintPanels(Fishing.st);
   }
 
@@ -708,11 +682,15 @@
       if (!Tackle.visible && !Tackle.animating && !Tackle.reeling && st.state === Fishing.S.IDLE) {
         Tackle.setPhase("idle");
       }
+      // 鱼跃出水面时，钓线跟着鱼走
+      const jk = window.Life ? Life.currentKoi() : null;
+      if (jk && jk.job && jk.job.kind === "leap") Tackle.lineFollow(jk.x, jk.y);
+      else Tackle.clearLineFollow();
       Tackle.update(dt);
     }
     if (st.state === Fishing.S.IDLE && !aiming && performance.now() > fanHoldUntil) {
       if (!aim) aim = Fishing.aimFromPointer(innerWidth * 0.45, innerHeight * 0.4);
-      paintFan();
+      paintAim();
       // 首钓引导：池心呼吸圈，首竿成即退役
       if (!save.hintDone) {
         els.castHint.style.left = aim.x.toFixed(1) + "px";

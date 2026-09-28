@@ -397,7 +397,7 @@
     el.style.zIndex = "1";
     document.body.appendChild(el);
     return {
-      el, len, big, spId: sp.id, sp,
+      el, len, big, spId: sp.id, sp, baseFilter: filter,
       heading: 0, desired: 0,
       cruise: (34 - big * 16 + Math.random() * 8) * sp.spd,
       fright: 1.5 - big * 0.9,
@@ -550,10 +550,15 @@
   function leapCatch() {
     if (!jobKoi) return;
     const k = jobKoi;
+    // 在咬钩点原地跃出水面：上抛翻滚，出水变清晰变大，入水回落
     k.job = { kind: "leap", t: 0,
       fx: k.x, fy: k.y,
-      tx: innerWidth / 2, ty: innerHeight - 170 };
+      drift: (innerWidth / 2 - k.x) * 0.22 + rnd(-30, 30),
+      peak: 120 + Math.random() * 60,
+      dur: 0.9,
+      splashOut: false, splashIn: false };
     k.hidden = false;
+    k.el.style.filter = "none"; // 出水后不再有水下模糊
   }
 
   function releaseCurrent() {
@@ -561,6 +566,9 @@
     const k = jobKoi;
     k.job = null;
     k.hidden = false;
+    k.airScale = 0;
+    k.el.style.filter = k.baseFilter;
+    k.el.style.opacity = "";
     k.x = innerWidth / 2; k.y = innerHeight - 150;
     k.grace = 1.5;
     const h = Math.atan2(innerHeight * 0.4 - k.y, innerWidth * 0.45 - k.x);
@@ -614,14 +622,24 @@
       ty = job.y + Math.sin(a) * r * 0.75;
       spd = 120 + surge * 260;
     } else if (job.kind === "leap") {
-      const u = Math.min(1, job.t / 0.55);
-      const e = u * u * (3 - 2 * u);
-      k.x = job.fx + (job.tx - job.fx) * e;
-      k.y = job.fy + (job.ty - job.fy) * e - Math.sin(u * Math.PI) * 130;
-      k.heading = Math.atan2(job.ty - job.fy, job.tx - job.fx);
-      const keep = u < 0.85 ? 1 : Math.max(0, 1 - (u - 0.85) / 0.15);
-      k.el.style.opacity = (0.9 * keep).toFixed(2);
+      // 原地跃出：抛物线上抛 + 翻滚，出水/入水各一次水花
+      const u = Math.min(1, job.t / job.dur);
+      k.x = job.fx + job.drift * u;
+      k.y = job.fy - Math.sin(u * Math.PI) * job.peak;
+      k.heading += dt * 9;
+      k.airScale = 1 + Math.sin(u * Math.PI) * 0.35;
+      if (!job.splashOut && u > 0.06) {
+        job.splashOut = true;
+        if (window.Water) Water.addDrop(job.fx, job.fy, 26, 1.2);
+      }
+      if (!job.splashIn && u > 0.88) {
+        job.splashIn = true;
+        if (window.Water) Water.addDrop(k.x, k.y, 18, 0.9);
+      }
+      const keep = u < 0.86 ? 1 : Math.max(0, 1 - (u - 0.86) / 0.14);
+      k.el.style.opacity = keep.toFixed(2);
       if (u >= 1) { k.hidden = true; k.el.style.opacity = "0"; }
+      k.jobSpd = 0;
       return;
     }
 
@@ -737,9 +755,10 @@
       const px = k.x + Math.cos(k.heading + Math.PI / 2) * wig;
       const py = k.y + Math.sin(k.heading + Math.PI / 2) * wig;
       const w = k.len * 60 / 130;
-      // 河豚被钩住会鼓气
+      // 河豚被钩住会鼓气；跃出水面的鱼会撑满画面焦点
       let sc = 1;
       if (k.sp.puff && k.job && k.job.kind === "hooked") sc = 1 + Math.min(0.3, k.job.t * 0.2);
+      if (k.airScale) sc *= k.airScale;
       k.el.style.transform =
         `translate(${(px - w / 2).toFixed(1)}px, ${(py - k.len / 2).toFixed(1)}px) ` +
         `rotate(${(k.visDeg + bank).toFixed(1)}deg) scale(${sc.toFixed(2)})`;

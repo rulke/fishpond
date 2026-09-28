@@ -113,17 +113,11 @@
   function aimToXY(dir, pow) {
     const rx = innerWidth > 720 ? innerWidth * 0.5 + 60 : innerWidth * 0.55;
     const ry = innerHeight > 640 ? innerHeight * 0.74 : innerHeight * 0.76;
-    // 左 → 上偏右的扇面，避免贴底或抛出画面
-    const ang = (208 + dir * 88) * Math.PI / 180;
-    const maxD = Math.min(innerWidth, innerHeight) * 0.78;
-    const dist = (0.25 + pow * 0.75) * maxD;
-    let x = rx + Math.cos(ang) * dist;
-    let y = ry + Math.sin(ang) * dist;
-    const m = 36;
-    x = Math.max(m, Math.min(innerWidth - m, x));
-    y = Math.max(m, Math.min(innerHeight - m, y));
-    // 落点控制在水域中段
-    y = Math.max(innerHeight * 0.12, Math.min(y, innerHeight * 0.68));
+    const maxD = Math.min(innerWidth, innerHeight) * 0.82;
+    const ang = dir != null ? dir * Math.PI * 2 : Math.PI * 1.25;
+    const dist = pow * maxD;
+    const x = Math.max(30, Math.min(innerWidth - 30, rx + Math.cos(ang) * dist));
+    const y = Math.max(30, Math.min(innerHeight - 30, ry + Math.sin(ang) * dist));
     return { x, y, ang, dist, rx, ry };
   }
 
@@ -173,25 +167,14 @@
   function aimFromPointer(px, py) {
     const rx = innerWidth > 720 ? innerWidth * 0.5 + 60 : innerWidth * 0.55;
     const ry = innerHeight > 640 ? innerHeight * 0.74 : innerHeight * 0.76;
-    const dx = px - rx, dy = py - ry;
-    let ang = Math.atan2(dy, dx);
-    // 屏幕坐标：竿在下方，扇面铺满上方 175°–365°
-    const minA = 175 * Math.PI / 180;
-    const maxA = 365 * Math.PI / 180;
-    // 角度归一到 minA 起算的区间再夹（正上方两侧都要覆盖）
-    let deg = ang;
-    if (deg < 0) deg += Math.PI * 2;
-    if (deg < minA) deg += Math.PI * 2;
-    deg = Math.max(minA, Math.min(maxA, deg));
-    ang = deg;
     const maxD = Math.min(innerWidth, innerHeight) * 0.82;
-    const minD = maxD * 0.18;
-    let dist = Math.hypot(dx, dy);
-    dist = Math.max(minD, Math.min(maxD, dist));
-    const x = rx + Math.cos(ang) * dist;
-    const y = ry + Math.sin(ang) * dist;
-    const pow = (dist - minD) / (maxD - minD); // 0..1
-    return { x, y, ang, dist, pow, rx, ry, minD, maxD };
+    // 全屏任选：落点即指针（留 30px 边距），力度=离竿尖的距离
+    const x = Math.max(30, Math.min(innerWidth - 30, px));
+    const y = Math.max(30, Math.min(innerHeight - 30, py));
+    const dist = Math.hypot(x - rx, y - ry);
+    const pow = Math.max(0, Math.min(1, dist / maxD));
+    const ang = Math.atan2(y - ry, x - rx);
+    return { x, y, ang, dist, pow, rx, ry, minD: 0, maxD };
   }
 
   function setBait(id, silent) {
@@ -215,7 +198,7 @@
     st.lineY = aim.y;
     st.rodX = aim.rx;
     st.rodY = aim.ry;
-    st.castDir = Math.max(0, Math.min(1, (aim.ang - 175 * Math.PI / 180) / (190 * Math.PI / 180)));
+    st.castDir = Math.max(0, Math.min(1, (((aim.ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2)));
     st.castPow = aim.pow;
     st.state = S.CASTING;
     st.bobberDip = 0;
@@ -240,7 +223,8 @@
       st.biteKoi = null;
       st.reaskT = 0.6;
       emit("waiting", {});
-    }, 640);
+      // 等待期计时与抛竿分镜同源，漂落水后才开钓
+    }, window.Tackle ? Tackle.castDuration(aim.dist) : 640);
     return true;
   }
 
