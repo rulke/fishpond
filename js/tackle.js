@@ -421,6 +421,9 @@
     get visible() { return visible; },
     get animating() { return !!anim; },
     get reeling() { return !!reel; },
+    // 漂正浮在水面（脱钩后未收回）：长按收线/原位再抛用
+    get floating() { return visible && !reel && !anim; },
+    get floatPos() { return { x: bobX, y: bobY }; },
     get landFlash() { return landFlash; },
   };
 })();

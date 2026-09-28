@@ -222,7 +222,8 @@
       </g>`;
 
     if (mode === "idle") {
-      els.aimFan.innerHTML = band(0.12, 0.22) + ghost;
+      // 漂还浮在水面（脱钩后）就不画幽灵圈，真漂即是位置
+      els.aimFan.innerHTML = band(0.12, 0.22) + (Tackle.floating ? "" : ghost);
       return;
     }
     els.aimFan.innerHTML = band(0.28, 0.45) + preview;
@@ -264,6 +265,11 @@
         press.fired = true;
         if (navigator.vibrate) { try { navigator.vibrate(8); } catch (err) {} }
         Fishing.retract();
+      } else if (press && !press.fired && Tackle.floating && Fishing.st.state === Fishing.S.IDLE) {
+        // 脱钩后漂留在水面：长按同样收线
+        press.fired = true;
+        if (navigator.vibrate) { try { navigator.vibrate(8); } catch (err) {} }
+        Tackle.startReelIn();
       }
     };
   }
@@ -302,10 +308,11 @@
       if (window.Life) Life.disperse();
       if (!save.hintDone) { save.hintDone = true; persist(); } // 首竿成，引导圈退役
       if (window.Tackle) {
-        // 分镜落点必须用钳制后的真实落点，否则漂与鱼影/涟漪分家
+        // 分镜落点必须用钳制后的真实落点；漂在水面时从原位直接甩往新钓点
         const lx = Fishing.st.lineX, ly = Fishing.st.lineY;
-        Tackle.startFlight({ x: Fishing.st.rodX, y: Fishing.st.rodY }, {
-          x: lx, y: ly, dist: Math.hypot(lx - Fishing.st.rodX, ly - Fishing.st.rodY),
+        const fromPt = Tackle.floating ? Tackle.floatPos() : { x: Fishing.st.rodX, y: Fishing.st.rodY };
+        Tackle.startFlight(fromPt, {
+          x: lx, y: ly, dist: Math.hypot(lx - fromPt.x, ly - fromPt.y),
         });
         Tackle.setBait(baitSvgOf(save.bait));
       }
@@ -514,10 +521,13 @@
           Water.addDrop(Fishing.st.lineX, Fishing.st.lineY, 30, 1.2);
         }
         if (window.Life) Life.fleeBait();
-        if (window.Tackle) {
-          // 咬钩脱钩先看它吐钩回弹，遛鱼失败喘半拍，再收线
-          const delay = data.from === "fight" ? 500 : data.from === "bite" ? 350 : 80;
-          setTimeout(() => Tackle.startReelIn(), delay);
+        if (window.Tackle && (data.from === "fight" || data.from === "bite")) {
+          // 脱钩后漂浮在原地（真实）：不自动收线，玩家长按收线或直接换钓点
+          Tackle.setPhase("wait");
+        }
+        if (window.Tackle && data.from === "nibble") {
+          // 提前扬竿是玩家自己提的竿：竿已出水，收线合理
+          setTimeout(() => Tackle.startReelIn(), 80);
         }
         break;
       case "retract":
@@ -593,6 +603,7 @@
         return;
       }
       press = { x: e.clientX, y: e.clientY, t0: performance.now(), fired: false };
+      if (window.Tackle && Tackle.floating) holdRingShow(e.clientX, e.clientY); // 漂在水面：长按收线
     }
   }
 
@@ -623,6 +634,7 @@
       return;
     }
     if (st.state === Fishing.S.IDLE && Math.hypot(dx, dy) > 24) {
+      holdRingCancel();
       startAim(e.clientX, e.clientY);
     }
   }
