@@ -25,13 +25,11 @@
     zenBeads: $("zenBeads"),
     tensionWrap: $("tensionWrap"),
     reelNeedle: $("reelNeedle"),
-    actionBtn: $("actionBtn"),
     helpBtn: $("helpBtn"),
     help: $("help"),
     helpClose: $("helpClose"),
     aimFan: $("aimFan"),
     aimVeil: $("aimVeil"),
-    retractBtn: $("retractBtn"),
     castHint: $("castHint"),
     dock: $("dock"),
   };
@@ -45,7 +43,7 @@
   let aim = null; // Fishing.aimFromPointer 结果
   let fanKey = "";
   let tagTimer = 0;
-  let press = null; // IDLE 按下待判定：拖够距离才瞄准
+  let press = null; // 按下手势：{x, y, t0, fired}——按时长/位移/方向分类
   let fanHoldUntil = 0; // 逃鱼/收线后扇面缓一拍再回来
 
   try {
@@ -245,6 +243,35 @@
     paintAim();
   }
 
+  let holdRingAnim = null;
+  function holdRingShow(x, y) {
+    if (!els.holdRing) {
+      els.holdRing = document.createElement("div");
+      els.holdRing.id = "holdRing";
+      document.body.appendChild(els.holdRing);
+    }
+    els.holdRing.style.left = x + "px";
+    els.holdRing.style.top = y + "px";
+    els.holdRing.classList.add("show");
+    holdRingAnim = els.holdRing.animate([
+      { transform: "scale(1.2)", opacity: .95 },
+      { transform: "scale(.42)", opacity: .5 },
+    ], { duration: 450, easing: "ease-in" });
+    holdRingAnim.onfinish = () => {
+      holdRingAnim = null;
+      els.holdRing.classList.remove("show");
+      if (press && !press.fired && Fishing.st.state === Fishing.S.WAITING) {
+        press.fired = true;
+        if (navigator.vibrate) { try { navigator.vibrate(8); } catch (err) {} }
+        Fishing.retract();
+      }
+    };
+  }
+  function holdRingCancel() {
+    if (holdRingAnim) { holdRingAnim.cancel(); holdRingAnim = null; }
+    if (els.holdRing) els.holdRing.classList.remove("show");
+  }
+
   function clearFan() {
     els.aimFan.innerHTML = "";
     fanKey = "";
@@ -420,14 +447,9 @@
 
   /* ---------- panels：状态只用器物与按钮表达，不飘字 ---------- */
   function paintPanels(st) {
-    const idle = st.state === Fishing.S.IDLE;
-    els.retractBtn.hidden = st.state !== Fishing.S.WAITING;
-    els.actionBtn.hidden = st.state !== Fishing.S.BITE;
-    els.actionBtn.textContent = "扬竿";
-    els.actionBtn.className = "action-btn" + (st.state === Fishing.S.BITE ? " urgent" : "");
     els.tensionWrap.classList.toggle("show", st.state === Fishing.S.FIGHTING);
     els.dock.classList.toggle("card-mode", st.state === Fishing.S.CAUGHT);
-    if (!idle) {
+    if (st.state !== Fishing.S.IDLE) {
       // 离开待机就收掉扇面与暗角，不留残影
       aiming = false;
       clearFan();
@@ -454,11 +476,18 @@
         if (window.Tackle) {
           Tackle.setPhase("bite");
           Tackle.splashRing(Fishing.st.lineX, Fishing.st.lineY);
+          Tackle.bitePulse(Fishing.st.lineX, Fishing.st.lineY);
         }
         if (window.Life) Life.lungeBait();
         break;
       case "fight":
-        if (window.Tackle) Tackle.setPhase("fight", Fishing.st.tension);
+        if (window.Tackle) {
+          Tackle.setPhase("fight", Fishing.st.tension);
+          Tackle.startHookset();
+          Tackle.setBobberVisible(false);
+          Tackle.splashRing(Fishing.st.lineX, Fishing.st.lineY, true);
+        }
+        if (window.Water) Water.addDrop(Fishing.st.lineX, Fishing.st.lineY, 24, 1.1);
         if (window.Life) Life.hookActive();
         break;
       case "blank":
@@ -518,7 +547,7 @@
 
   /* ---------- input ---------- */
   function isUiTarget(e) {
-    return e.target.closest(".hud, .panel, .card, .bait-chip, .action-btn, .retract-btn");
+    return e.target.closest(".hud, .panel, .card, .bait-chip");
   }
 
   function onPointerDown(e) {
@@ -526,18 +555,19 @@
     const st = Fishing.st;
     const onBobber = !!(e.target.closest && e.target.closest("#bobber"));
     if (st.state === Fishing.S.BITE) {
+      // 起竿：没顶后任意按下即提竿（起竿爆发动画在 fight 事件里）
       Fishing.hook();
       return;
     }
     if (st.state === Fishing.S.NIBBLE) {
-      // 只有碰到浮漂才算扬竿，别处点水不惊鱼
-      if (onBobber) Fishing.hook();
+      press = { x: e.clientX, y: e.clientY, t0: performance.now(), fired: false };
+      if (onBobber) { press.fired = true; Fishing.hook(); } // 点漂=提前扬竿
       else if (window.Water) Water.addDrop(e.clientX, e.clientY, 5, 0.1);
       return;
     }
     if (st.state === Fishing.S.WAITING) {
-      // 等待期点水只起涟漪；收线只认角落的收线钮
-      if (window.Water) Water.addDrop(e.clientX, e.clientY, 6, 0.14);
+      press = { x: e.clientX, y: e.clientY, t0: performance.now(), fired: false };
+      holdRingShow(e.clientX, e.clientY); // 长按 450ms 收线
       return;
     }
     if (st.state === Fishing.S.FIGHTING) {
@@ -549,8 +579,7 @@
         if (window.Water) Water.addDrop(e.clientX, e.clientY, 6, 0.14);
         return;
       }
-      // 按下先不进入瞄准：拖动超过阈值才算"要抛"，短点只起涟漪
-      press = { x: e.clientX, y: e.clientY };
+      press = { x: e.clientX, y: e.clientY, t0: performance.now(), fired: false };
     }
   }
 
@@ -559,8 +588,28 @@
       moveAim(e.clientX, e.clientY);
       return;
     }
-    if (press && Fishing.st.state === Fishing.S.IDLE &&
-        Math.hypot(e.clientX - press.x, e.clientY - press.y) > 24) {
+    if (!press || press.fired) return;
+    const dx = e.clientX - press.x, dy = e.clientY - press.y;
+    const dt = performance.now() - press.t0;
+    const st = Fishing.st;
+    if (st.state === Fishing.S.FIGHTING) {
+      Fishing.setReeling(true); // 起竿后按住不放，直接进入收线节奏
+      return;
+    }
+    if (st.state === Fishing.S.NIBBLE && dy < -40 && dt < 350) {
+      press.fired = true;
+      holdRingCancel();
+      Fishing.hook(); // 上滑=提前扬竿
+      return;
+    }
+    if (st.state === Fishing.S.WAITING && dy < -40 && dt < 350) {
+      press.fired = true;
+      holdRingCancel();
+      Tackle.startTwitch(); // 空扬竿：竿轻点水
+      if (window.Water) Water.addDrop(press.x, press.y, 8, 0.25);
+      return;
+    }
+    if (st.state === Fishing.S.IDLE && Math.hypot(dx, dy) > 24) {
       startAim(e.clientX, e.clientY);
     }
   }
@@ -573,9 +622,19 @@
       return;
     }
     if (press) {
-      // 短点击：只应一句涟漪，不抛竿
-      if (window.Water) Water.addDrop(e.clientX, e.clientY, 7, 0.18);
+      const fired = press.fired;
       press = null;
+      holdRingCancel();
+      if (fired) return;
+      const st = Fishing.st;
+      if (st.state === Fishing.S.WAITING) {
+        Tackle.startTwitch(); // 轻点=空扬竿
+        if (window.Water) Water.addDrop(e.clientX, e.clientY, 8, 0.25);
+      } else if (st.state === Fishing.S.NIBBLE) {
+        if (window.Water) Water.addDrop(e.clientX, e.clientY, 5, 0.1);
+      } else if (st.state === Fishing.S.IDLE) {
+        if (window.Water) Water.addDrop(e.clientX, e.clientY, 7, 0.18);
+      }
     }
   }
 
@@ -585,28 +644,13 @@
   window.addEventListener("pointercancel", (e) => {
     Fishing.setReeling(false);
     press = null;
+    holdRingCancel();
     if (aiming) cancelAim();
   });
 
   els.tensionWrap.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
     Fishing.setReeling(true);
-  });
-
-  els.retractBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    Fishing.retract();
-  });
-
-  els.actionBtn.addEventListener("pointerdown", (e) => {
-    e.stopPropagation();
-    const st = Fishing.st;
-    if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) Fishing.hook();
-    else if (st.state === Fishing.S.FIGHTING) Fishing.setReeling(true);
-  });
-  els.actionBtn.addEventListener("pointerup", (e) => {
-    e.stopPropagation();
-    Fishing.setReeling(false);
   });
 
   els.btnKeep.addEventListener("click", (e) => {
@@ -646,6 +690,7 @@
       e.preventDefault();
       const st = Fishing.st;
       if (st.state === Fishing.S.IDLE) castTo(innerWidth * 0.45, innerHeight * 0.4);
+      else if (st.state === Fishing.S.WAITING) Fishing.retract();
       else if (st.state === Fishing.S.BITE || st.state === Fishing.S.NIBBLE) Fishing.hook();
       else if (st.state === Fishing.S.FIGHTING) Fishing.setReeling(true);
     }
@@ -684,8 +729,9 @@
       }
       // 鱼跃出水面时，钓线跟着鱼走
       const jk = window.Life ? Life.currentKoi() : null;
-      if (jk && jk.job && jk.job.kind === "leap") Tackle.lineFollow(jk.x, jk.y);
-      else Tackle.clearLineFollow();
+      if (jk && jk.job && (jk.job.kind === "leap" || jk.job.kind === "hooked" || jk.job.kind === "hookjump")) {
+        Tackle.lineFollow(jk.x, jk.y);
+      } else Tackle.clearLineFollow();
       Tackle.update(dt);
     }
     if (st.state === Fishing.S.IDLE && !aiming && performance.now() > fanHoldUntil) {

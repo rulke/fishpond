@@ -59,8 +59,11 @@
   let reel = null; // { t, dur, fx, fy }
   let reelFlash = 0;
 
-  // 线跟随：跃出水面的鱼把线带离漂位
+  // 线跟随：跃出水面的鱼 / 遛鱼中的鱼把线带离漂位
   let lineFollowPt = null;
+
+  // 起竿（hookset）与空扬竿（twitch）的时间线
+  let hooksetT = -1, twitchT = -1;
 
   function rodAnchor() {
     const W = innerWidth, H = innerHeight;
@@ -140,9 +143,37 @@
     return Math.round((0.26 + fd + 0.14) * 1000);
   }
 
-  // 钓线改跟跃出水面的鱼
+  // 钓线改跟跃出水面/遛鱼中的鱼
   function lineFollow(x, y) { lineFollowPt = { x, y }; }
   function clearLineFollow() { lineFollowPt = null; }
+
+  // 起竿：竿猛甩向肩后再回弹入遛鱼（0.55s 爆发，弯曲线由 update 覆盖）
+  function startHookset() {
+    hooksetT = 0;
+    reelFlash = 1;
+  }
+
+  // 空扬竿：等待期轻点/上滑，竿小幅一动
+  function startTwitch() {
+    twitchT = 0;
+  }
+
+  // 咬钩急环：荷粉色双脉冲，两拍正好是咬钩窗口
+  function bitePulse(x, y) {
+    const el = document.createElement("div");
+    el.className = "bite-pulse";
+    el.style.left = x + "px";
+    el.style.top = y + "px";
+    document.body.appendChild(el);
+    el.animate([
+      { transform: "translate(-50%,-50%) scale(.5)", opacity: 1 },
+      { transform: "translate(-50%,-50%) scale(1.7)", opacity: 0 },
+    ], { duration: 800, iterations: 2, easing: "ease-out" }).onfinish = () => el.remove();
+  }
+
+  function setBobberVisible(v) {
+    if (bobber) bobber.classList.toggle("show", !!v && visible);
+  }
 
   function startReelIn() {
     if (!visible || reel) return;
@@ -278,9 +309,32 @@
       const warn = Math.max(0, (tension - 0.78) / 0.14);
       if (warn > 0) extra += Math.sin(performance.now() * 0.13) * warn * 3.2;
     }
+    // 起竿爆发：猛甩向肩后 → 回弹过冲 → 交给遛鱼弯曲
+    if (hooksetT >= 0) {
+      hooksetT += dt;
+      if (hooksetT < 0.15) bendTarget = -1.15;
+      else {
+        const u = Math.min(1, (hooksetT - 0.15) / 0.4);
+        bendTarget = 1.0 - u * 0.35;
+      }
+      extra += Math.sin(hooksetT * 40) * 2;
+      if (hooksetT > 0.55) hooksetT = -1;
+    }
+    // 空扬竿：竿小幅一动
+    if (twitchT >= 0) {
+      twitchT += dt;
+      bendTarget = -0.38 * Math.sin(Math.min(1, twitchT / 0.3) * Math.PI);
+      if (twitchT > 0.32) twitchT = -1;
+    }
+    // 溜鱼时竿尖朝鱼的方向压
+    let tipPull = 0;
+    if (lineFollowPt && phase === "fight") {
+      const anc0 = rodAnchor();
+      tipPull = Math.max(-14, Math.min(14, (lineFollowPt.x - anc0.tx) * 0.06));
+    }
 
     const tip = tipPosition();
-    const tipX = tip.x + extra;
+    const tipX = tip.x + extra + tipPull;
     const tipY = tip.y;
     const midX = (tipX + tip.gripX) / 2 + bend * 10;
     const midY = (tipY + tip.gripY) / 2 + bend * 6;
@@ -341,7 +395,11 @@
     setDip,
     startFlight,
     startReelIn,
+    startHookset,
+    startTwitch,
+    setBobberVisible,
     splashRing,
+    bitePulse,
     lineFollow,
     clearLineFollow,
     castDuration,

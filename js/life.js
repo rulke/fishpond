@@ -613,6 +613,18 @@
     } else if (job.kind === "lunge") {
       tx = job.x; ty = job.y;
       spd = 430;
+    } else if (job.kind === "hookjump") {
+      // 起竿：鱼被线拽出水面半截，翻滚着落回，再入遛鱼
+      const u = Math.min(1, job.t / 0.35);
+      const side = k.phase > Math.PI ? 1 : -1;
+      k.x = job.x + Math.sin(u * Math.PI) * 14 * side;
+      k.y = job.y - Math.sin(u * Math.PI) * (44 + k.len * 0.25);
+      k.heading += dt * 10;
+      k.airScale = 1 + Math.sin(u * Math.PI) * 0.3;
+      k.jobSpd = 0;
+      if (window.Water && !job.spl && u > 0.04) { job.spl = true; Water.addDrop(job.x, job.y, 20, 1.0); }
+      if (u >= 1) { k.job.kind = "hooked"; k.job.t = 0; k.airScale = 0; }
+      return;
     } else if (job.kind === "hooked") {
       const surge = Math.max(0, Math.sin((st && st.fightPhase || 0) * 2.2)) ** 2;
       const prog = st ? st.fightProgress : 0;
@@ -621,6 +633,8 @@
       tx = job.x + Math.cos(a) * r;
       ty = job.y + Math.sin(a) * r * 0.75;
       spd = 120 + surge * 260;
+      // 冲刺时沿身拖出白色水痕
+      if (surge > 0.55 && window.Water && Math.random() < dt * 6) Water.addDrop(k.x, k.y, 6, 0.18);
     } else if (job.kind === "leap") {
       // 原地跃出：抛物线上抛 + 翻滚，出水/入水各一次水花
       const u = Math.min(1, job.t / job.dur);
@@ -915,7 +929,7 @@
     assignNearest,
     circleBait: () => setJob("circle"),
     lungeBait: () => setJob("lunge"),
-    hookActive: () => setJob("hooked"),
+    hookActive: () => setJob("hookjump"),
     fleeBait,
     leapCatch,
     releaseCurrent,
