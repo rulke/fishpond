@@ -496,6 +496,19 @@
       case "escaped":
         hideCard();
         fanHoldUntil = performance.now() + 800;
+        {
+          const fk = window.Life ? Life.currentKoi() : null;
+          if (data.from === "fight" && fk) {
+            // 鱼松口窜走，漂在它脱钩的位置弹回水面
+            Fishing.st.lineX = fk.x; Fishing.st.lineY = fk.y;
+            if (window.Tackle) {
+              Tackle.setFloatPos(fk.x, fk.y);
+              Tackle.setBobberVisible(true);
+            }
+            Fishing.st.biteRebound = 0.7;
+            Fishing.st.biteReboundAmp = 3;
+          }
+        }
         if (window.Water && data.from === "fight") {
           // 断线的"崩"：大水花标在断点
           Water.addDrop(Fishing.st.lineX, Fishing.st.lineY, 30, 1.2);
@@ -727,11 +740,13 @@
       if (!Tackle.visible && !Tackle.animating && !Tackle.reeling && st.state === Fishing.S.IDLE) {
         Tackle.setPhase("idle");
       }
-      // 鱼跃出水面时，钓线跟着鱼走
+      // 鱼跃出/遛鱼时，钓线跟着鱼走；黑漂时漂跟着鱼走
       const jk = window.Life ? Life.currentKoi() : null;
       if (jk && jk.job && (jk.job.kind === "leap" || jk.job.kind === "hooked" || jk.job.kind === "hookjump")) {
         Tackle.lineFollow(jk.x, jk.y);
       } else Tackle.clearLineFollow();
+      if (st.state === Fishing.S.BITE) Tackle.dragFloatTo(st.lineX, st.lineY);
+      else Tackle.clearDragFloat();
       Tackle.update(dt);
     }
     if (st.state === Fishing.S.IDLE && !aiming && performance.now() > fanHoldUntil) {

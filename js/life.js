@@ -611,8 +611,25 @@
       ty = job.y + Math.sin(a) * r * 0.72;
       spd = 95;
     } else if (job.kind === "lunge") {
-      tx = job.x; ty = job.y;
+      // 咬的是漂下的饵，不是漂本身
+      tx = job.x; ty = job.y + 10;
       spd = 430;
+      if (Math.hypot(tx - k.x, ty - k.y) <= 8) {
+        // 叼住了：拖着漂游走（黑漂）
+        job.kind = "drag";
+        job.dragAng = Math.random() * Math.PI * 2;
+        job.dragSpd = 55 + Math.random() * 45;
+        job.t = 0;
+      }
+    } else if (job.kind === "drag") {
+      // 拖漂游走：偶尔回头，别撞岸
+      job.dragAng += (Math.random() - 0.5) * dt * 1.6;
+      if (k.x < 90 || k.x > innerWidth - 90 || k.y < 90 || k.y > innerHeight - 90) {
+        job.dragAng = Math.atan2(innerHeight / 2 - k.y, innerWidth / 2 - k.x);
+      }
+      tx = k.x + Math.cos(job.dragAng) * 80;
+      ty = k.y + Math.sin(job.dragAng) * 80;
+      spd = job.dragSpd;
     } else if (job.kind === "hookjump") {
       // 起竿：鱼被线拽出水面半截，翻滚着落回，再入遛鱼
       const u = Math.min(1, job.t / 0.35);
@@ -631,7 +648,7 @@
       const r = 30 + (1 - prog) * 34 + surge * 26;
       const a = now * (1.6 + surge * 3.2) + k.phase;
       tx = job.x + Math.cos(a) * r;
-      ty = job.y + Math.sin(a) * r * 0.75;
+      ty = job.y + 10 + Math.sin(a) * r * 0.75;
       spd = 120 + surge * 260;
       // 冲刺时沿身拖出白色水痕
       if (surge > 0.55 && window.Water && Math.random() < dt * 6) Water.addDrop(k.x, k.y, 6, 0.18);
@@ -929,7 +946,15 @@
     assignNearest,
     circleBait: () => setJob("circle"),
     lungeBait: () => setJob("lunge"),
-    hookActive: () => setJob("hookjump"),
+    hookActive: () => {
+      if (!jobKoi || !jobKoi.job || jobKoi.job.kind === "leap") return;
+      const k = jobKoi;
+      jobKoi.job.kind = "hookjump";
+      jobKoi.job.t = 0;
+      jobKoi.job.spl = false;
+      jobKoi.job.x = k.x;
+      jobKoi.job.y = k.y;
+    },
     fleeBait,
     leapCatch,
     releaseCurrent,

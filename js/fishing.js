@@ -63,6 +63,7 @@
 
   // 咬钩窗口；上浮段就是"窗口将尽"的视觉信号，用运动代替倒计时
   const BITE_WINDOW = 1.6;
+  const REBOUND_DUR = 0.6; // 吐钩/脱钩后漂的回弹时长
 
   const S = {
     IDLE: "IDLE",
@@ -87,6 +88,8 @@
     waitTimer: 0,
     biteKoi: null,     // 被指派来咬钩的塘内真鱼
     reaskT: 0,
+    biteRebound: 0,      // 漂回弹剩余时长
+    biteReboundAmp: 0,   // 回弹起始幅度
     pendingFish: null,
     tension: 0.35,        // 0-1
     fightProgress: 0,     // 0-1 收服进度
@@ -246,7 +249,8 @@
   function hook() {
     if (st.state === S.NIBBLE) {
       st.state = S.IDLE;
-      st.bobberDip = 0;
+      st.biteRebound = 0.5;
+      st.biteReboundAmp = 1;
       st.biteKoi = null;
       zenAdd(-6);
       if (window.Water) Water.addDrop(st.lineX, st.lineY, 18, 0.5);
@@ -388,10 +392,17 @@
         if (gone < 0.25) st.bobberDip = 1.5 + (gone / 0.25) * 2.7;
         else if (gone < 1.1) st.bobberDip = 4.2;
         else st.bobberDip = Math.max(0.9, 4.2 - ((gone - 1.1) / 0.5) * 3.3);
+        // 黑漂拖走：鱼叼着饵游，漂被拽着跟（滞后跟随）
+        if (window.Life && st.biteKoi) {
+          const k = st.biteKoi;
+          st.lineX += (k.x - st.lineX) * Math.min(1, dt * 2.5);
+          st.lineY += (k.y - st.lineY) * Math.min(1, dt * 2.5);
+        }
         if (st.biteTimer <= 0) {
           st.state = S.IDLE;
-          st.bobberDip = 0;
           st.biteKoi = null;
+          st.biteRebound = 0.6;          // 吐钩：漂回弹两下渐弱
+          st.biteReboundAmp = st.bobberDip;
           zenAdd(-3);
           if (window.Water) Water.addDrop(st.lineX, st.lineY, 14, 0.5);
           emit("escaped", { text: "没提竿……它吐钩走了。", from: "bite" });
@@ -404,6 +415,16 @@
       }
       case S.CAUGHT: {
         st.bobberDip = 0;
+        break;
+      }
+      case S.IDLE: {
+        // 吐钩/脱钩后漂的回弹：渐弱震荡归零
+        if (st.biteRebound > 0) {
+          st.biteRebound -= dt;
+          const rt = REBOUND_DUR - Math.max(0, st.biteRebound);
+          st.bobberDip = st.biteReboundAmp * Math.exp(-rt * 4.5) * Math.abs(Math.cos(rt * 15));
+          if (st.biteRebound <= 0) { st.bobberDip = 0; st.biteReboundAmp = 0; }
+        }
         break;
       }
       default:

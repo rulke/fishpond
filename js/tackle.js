@@ -62,6 +62,12 @@
   // 线跟随：跃出水面的鱼 / 遛鱼中的鱼把线带离漂位
   let lineFollowPt = null;
 
+  // 黑漂拖走：漂位被咬钩的鱼拽着走
+  let dragPt = null;
+  function dragFloatTo(x, y) { dragPt = { x, y }; }
+  function clearDragFloat() { dragPt = null; }
+  function setFloatPos(x, y) { bobX = x; bobY = y; }
+
   // 起竿（hookset）与空扬竿（twitch）的时间线
   let hooksetT = -1, twitchT = -1;
 
@@ -266,6 +272,11 @@
   function update(dt) {
     if (landFlash > 0) landFlash = Math.max(0, landFlash - dt * 2.5);
     if (reelFlash > 0) reelFlash = Math.max(0, reelFlash - dt * 2.2);
+    // 黑漂：漂被咬钩的鱼拽着走（滞后跟随）
+    if (dragPt && phase === "bite") {
+      bobX += (dragPt.x - bobX) * Math.min(1, dt * 4);
+      bobY += (dragPt.y - bobY) * Math.min(1, dt * 4);
+    }
 
     if (reel) {
       reel.t += dt;
@@ -402,6 +413,9 @@
     bitePulse,
     lineFollow,
     clearLineFollow,
+    dragFloatTo,
+    clearDragFloat,
+    setFloatPos,
     castDuration,
     update,
     get visible() { return visible; },
