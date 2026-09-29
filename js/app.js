@@ -321,14 +321,10 @@
   }
 
   /* ---------- journal ---------- */
+  // 鱼鉴与渔获卡共用同一套品种插画
   function miniFishSvg(sp, w) {
-    const c1 = sp.colors[0], c2 = sp.colors[1];
-    return `<svg viewBox="0 0 60 28" width="${w}" height="${Math.round(w * 28 / 60)}" aria-hidden="true">
-      <path d="M50 14 C44 6 32 4 22 8 C16 10 12 12 12 14 C12 16 16 18 22 20 C32 24 44 22 50 14 Z" fill="${c1}"/>
-      <path d="M13 14 L4 7 L6.5 14 L4 21 Z" fill="${c2}"/>
-      <ellipse cx="33" cy="13" rx="6" ry="3" fill="${c2}" opacity=".45"/>
-      <circle cx="45" cy="13" r="1.6" fill="#233"/>
-    </svg>`;
+    const inner = fishArtInner(sp, "jf" + sp.id);
+    return `<svg viewBox="0 0 240 120" width="${w}" height="${Math.round(w * 120 / 240)}" aria-hidden="true"><defs>${inner.defs}</defs>${inner.body}</svg>`;
   }
 
   function buildJournal() {
@@ -345,7 +341,7 @@
       for (const sp of g) {
         const rec = save.records[sp.id];
         html += rec && rec.count > 0
-          ? `<button class="j-cell got">${miniFishSvg(sp, 56)}<div class="j-name">${sp.name}</div><div class="j-sub">${rec.count} 尾 · ${rec.best} kg</div></button>`
+          ? `<button class="j-cell got"><div class="j-fish">${miniFishSvg(sp, 76)}</div><div class="j-name">${sp.name}</div><div class="j-sub">${rec.count} 尾 · ${rec.best} kg</div></button>`
           : `<button class="j-cell"><div class="j-dot" style="background:${meta.color}"></div><div class="j-name">？？？</div><div class="j-sub">${meta.label}</div></button>`;
       }
       html += `</div></div>`;
@@ -402,10 +398,9 @@
     lotus:    { tpl: "sprite" },
   };
 
-  function paintCardFish(sp) {
+  function fishArtInner(sp, uid) {
     const art = CARD_ART[sp.id] || { tpl: "normal", h: 1 };
     const c1 = sp.colors[0], c2 = sp.colors[1];
-    const uid = "cf" + sp.id;
     const rnd = cardRng(sp.id);
     let defs = "";
     let body = "";
@@ -526,11 +521,16 @@
         <circle cx="120" cy="52" r="3.2" fill="#fff" opacity=".95"/>`;
     }
 
+    return { defs, body };
+  }
+
+  function paintCardFish(sp) {
+    const a = fishArtInner(sp, "cf" + sp.id);
     els.cardFish.setAttribute("viewBox", "0 0 240 120");
     els.cardFish.innerHTML = `
-      <defs>${defs}</defs>
+      <defs>${a.defs}</defs>
       <ellipse cx="126" cy="104" rx="84" ry="7" fill="#123" opacity=".07"/>
-      <g class="cf-all">${body}</g>`;
+      <g class="cf-all">${a.body}</g>`;
   }
 
   function showCard(fish) {

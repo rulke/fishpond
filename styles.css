@@ -681,6 +681,8 @@ html, body {
   cursor: pointer;
   background: #fff;
 }
+.j-fish { height: 34px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 4px; }
+.j-fish svg { height: 100%; width: auto; }
 .j-cell.got .j-name { margin-top: 4px; }
 .j-dot {
   width: 8px; height: 8px; border-radius: 50%;
