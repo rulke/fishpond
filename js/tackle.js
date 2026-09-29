@@ -65,6 +65,17 @@
   // 线跟随：跃出水面的鱼 / 遛鱼中的鱼把线带离漂位
   let lineFollowPt = null;
 
+  // 竿随线转向：绕入口点旋转，方位平滑追踪线的末端
+  let rodAng = null;    // 当前方位角（屏幕坐标，向上为负角）
+  let rodFocus = null;  // 待机时由 App 喂入的瞄准焦点
+  function setRodFocus(x, y) { rodFocus = (x == null) ? null : { x, y }; }
+  function angDelta(a, b) {
+    let d = a - b;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  }
+
   // 黑漂拖走：漂位被咬钩的鱼拽着走
   let dragPt = null;
   function dragFloatTo(x, y) { dragPt = { x, y }; }
@@ -79,9 +90,13 @@
     // 画外之手：竿根隐在底坞之后，只露从中段到竿尖的一段
     const bx = W > 720 ? W * 0.5 + 150 : W * 0.5 + 95;
     const by = H + 8;
-    const tx = W > 720 ? W * 0.5 + 60 : W * 0.55;
-    const ty = H > 640 ? H * 0.74 : H * 0.76;
-    return { bx, by, tx, ty };
+    const rtx = W > 720 ? W * 0.5 + 60 : W * 0.55;
+    const rty = H > 640 ? H * 0.74 : H * 0.76;
+    return {
+      bx, by,
+      len: Math.hypot(rtx - bx, rty - by),
+      restAng: Math.atan2(rty - by, rtx - bx),
+    };
   }
 
   function setBait(svg) {
@@ -214,17 +229,17 @@
 
   function tipPosition() {
     const a = rodAnchor();
-    const bendPx = bend * 22;
-    // 入口即底缘处：整个可见竿身都是锥度段
-    const gx = a.bx;
-    const gy = a.by;
+    const ang = rodAng === null ? a.restAng : rodAng;
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    const tipLen = a.len + bend * 22 * 0.9; // 甩鞭伸长 / 后摆缩短
     return {
-      x: a.tx - bendPx * 0.7,
-      y: a.ty - bendPx * 0.7,
-      baseX: a.tx,
-      baseY: a.ty,
-      gripX: gx,
-      gripY: gy,
+      x: a.bx + dx * tipLen,
+      y: a.by + dy * tipLen,
+      baseX: a.bx,
+      baseY: a.by,
+      gripX: a.bx,
+      gripY: a.by,
+      dx, dy,
     };
   }
 
@@ -281,13 +296,23 @@
       bobY += (dragPt.y - bobY) * Math.min(1, dt * 4);
     }
 
+    // 竿随线转向：鱼（遛鱼/跃出）→ 漂 → 待机瞄准焦点；限制在池侧扇区
+    const A0 = rodAnchor();
+    if (rodAng === null) rodAng = A0.restAng;
+    const focus = lineFollowPt || (visible ? { x: bobX, y: bobY } : null) || rodFocus;
+    if (focus) {
+      const ta0 = Math.atan2(focus.y - A0.by, focus.x - A0.bx);
+      const ta = Math.max(-160 * Math.PI / 180, Math.min(-35 * Math.PI / 180, ta0));
+      rodAng += angDelta(ta, rodAng) * Math.min(1, dt * 3);
+    }
+
     if (reel) {
       reel.t += dt;
       const u = Math.min(1, reel.t / reel.dur);
       const e = u * u * (3 - 2 * u);
-      const a = rodAnchor();
-      bobX = reel.fx + (a.tx - reel.fx) * e;
-      bobY = reel.fy + (a.ty - reel.fy) * e;
+      const tp0 = tipPosition();
+      bobX = reel.fx + (tp0.x - reel.fx) * e;
+      bobY = reel.fy + (tp0.y - reel.fy) * e;
       // 收杆：漂贴水跳回（渐弱弹跳），竿身上扬，跳点起小涟漪
       const hop = Math.abs(Math.sin(u * Math.PI * 2.2)) * (1 - u) * 30;
       bobY -= hop;
@@ -340,18 +365,12 @@
       bendTarget = -0.38 * Math.sin(Math.min(1, twitchT / 0.3) * Math.PI);
       if (twitchT > 0.32) twitchT = -1;
     }
-    // 溜鱼时竿尖朝鱼的方向压
-    let tipPull = 0;
-    if (lineFollowPt && phase === "fight") {
-      const anc0 = rodAnchor();
-      tipPull = Math.max(-14, Math.min(14, (lineFollowPt.x - anc0.tx) * 0.06));
-    }
-
     const tip = tipPosition();
-    const tipX = tip.x + extra + tipPull;
+    const tipX = tip.x + extra;
     const tipY = tip.y;
-    const midX = (tipX + tip.gripX) / 2 + bend * 10;
-    const midY = (tipY + tip.gripY) / 2 + bend * 6;
+    // 弯折的法向弓起：随竿身方位一起转
+    const midX = (tipX + tip.gripX) / 2 + (-tip.dy) * bend * 12;
+    const midY = (tipY + tip.gripY) / 2 + tip.dx * bend * 12;
 
     // 二次曲线采点：入口(0) → 竿尖(1)
     const eX = tip.gripX, eY = tip.gripY;
@@ -432,6 +451,7 @@
     setDip,
     startFlight,
     startReelIn,
+    setRodFocus,
     startHookset,
     startTwitch,
     setBobberVisible,

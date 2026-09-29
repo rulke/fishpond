@@ -749,6 +749,10 @@
       else Tackle.clearDragFloat();
       Tackle.update(dt);
     }
+    if (st.state === Fishing.S.IDLE && window.Tackle && aim) {
+      // 待机时竿指向瞄准焦点（有漂/鱼时 Tackle 内部优先跟漂/跟鱼）
+      Tackle.setRodFocus(aim.x, aim.y);
+    }
     if (st.state === Fishing.S.IDLE && !aiming && performance.now() > fanHoldUntil) {
       if (!aim) aim = Fishing.aimFromPointer(innerWidth * 0.45, innerHeight * 0.4);
       paintAim();
