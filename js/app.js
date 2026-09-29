@@ -321,10 +321,15 @@
   }
 
   /* ---------- journal ---------- */
-  // 鱼鉴与渔获卡共用同一套品种插画
+  // 鱼鉴用的扁平小鱼：与渔获卡同一设计语言
   function miniFishSvg(sp, w) {
-    const inner = fishArtInner(sp, "jf" + sp.id);
-    return `<svg viewBox="0 0 240 120" width="${w}" height="${Math.round(w * 120 / 240)}" aria-hidden="true"><defs>${inner.defs}</defs>${inner.body}</svg>`;
+    const c1 = sp.colors[0], c2 = sp.colors[1];
+    return `<svg viewBox="0 0 60 28" width="${w}" height="${Math.round(w * 28 / 60)}" aria-hidden="true">
+      <path d="M50 14 C44 6 32 4 22 8 C16 10 12 12 12 14 C12 16 16 18 22 20 C32 24 44 22 50 14 Z" fill="${c1}"/>
+      <path d="M13 14 L4 7 L6.5 14 L4 21 Z" fill="${c2}"/>
+      <ellipse cx="33" cy="13" rx="6" ry="3" fill="${c2}" opacity=".45"/>
+      <circle cx="45" cy="13" r="1.6" fill="#233"/>
+    </svg>`;
   }
 
   function buildJournal() {
@@ -376,161 +381,20 @@
     const b = Math.max(0, Math.min(255, (v & 255) + amt));
     return `rgb(${r},${g},${b})`;
   }
-  function cardRng(id) {
-    let h = 2166136261;
-    for (const ch of id) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
-    return function () { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
-  }
-  function spark(x, y, s, o) {
-    return `<path d="M${x} ${y - s} L${x + s * 0.3} ${y - s * 0.3} L${x + s} ${y} L${x + s * 0.3} ${y + s * 0.3} L${x} ${y + s} L${x - s * 0.3} ${y + s * 0.3} L${x - s} ${y} L${x - s * 0.3} ${y - s * 0.3} Z" fill="#fff" opacity="${o}"/>`;
-  }
-
-  // 卡片鱼插画：品种 × 形体模板 × 花纹（确定性随机，同种同貌）
-  const CARD_ART = {
-    crucian:  { tpl: "normal", h: 0.9, scales: true },
-    loach:    { tpl: "normal", h: 0.56, tail: "short", whiskers: true, dots: true },
-    bream:    { tpl: "normal", h: 1.16, stripes: true },
-    carp:     { tpl: "normal", h: 1.04, whiskers: true, patches: "soft", scales: true },
-    goldfish: { tpl: "normal", h: 1.0, tail: "double" },
-    koi:      { tpl: "normal", h: 1.06, patches: "koi" },
-    puffer:   { tpl: "round", spikes: true, dots: true },
-    moon:     { tpl: "eel", glow: true },
-    lotus:    { tpl: "sprite" },
-  };
-
-  function fishArtInner(sp, uid) {
-    const art = CARD_ART[sp.id] || { tpl: "normal", h: 1 };
-    const c1 = sp.colors[0], c2 = sp.colors[1];
-    const rnd = cardRng(sp.id);
-    let defs = "";
-    let body = "";
-
-    defs += `<linearGradient id="${uid}g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${shade(c1, -36)}"/>
-      <stop offset=".45" stop-color="${c1}"/>
-      <stop offset=".8" stop-color="${shade(c1, 30)}"/>
-      <stop offset="1" stop-color="${shade(c1, 52)}"/>
-    </linearGradient>`;
-    defs += `<filter id="${uid}soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>`;
-
-    const eye = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#1c2a33"/><circle cx="${x}" cy="${y}" r="${(r * 0.6).toFixed(1)}" fill="${shade(c2, 36)}"/><circle cx="${(x - r * 0.28).toFixed(1)}" cy="${(y - r * 0.32).toFixed(1)}" r="${(r * 0.32).toFixed(1)}" fill="#fff" opacity=".92"/>`;
-    const whiskers = (x, y) => `<path d="M${x} ${y} C${x + 9} ${y - 4} ${x + 15} ${y - 5} ${x + 20} ${y - 3} M${x} ${y + 4} C${x + 9} ${y + 7} ${x + 15} ${y + 8} ${x + 20} ${y + 6}" stroke="${shade(c2, -20)}" stroke-width="1.6" fill="none" opacity=".85"/>`;
-    const finTint = (d) => `<path d="${d}" fill="${c2}" opacity=".4"/>`;
-
-    if (art.tpl === "normal") {
-      const h = art.h || 1;
-      const BODY = "M224 62 C214 46 190 32 154 29 C118 27 84 36 62 50 C56 54 51 58 50 61 C54 65 62 71 74 77 C100 88 138 93 168 89 C198 85 216 75 224 62 Z";
-      const TAIL = {
-        flow: "M62 48 C44 38 30 22 26 8 C40 26 56 36 68 40 C56 50 54 74 68 82 C56 86 40 96 26 114 C30 96 44 82 62 72 Z",
-        short: "M62 48 C48 40 36 30 30 18 C42 30 56 38 66 42 C58 50 58 70 66 76 C56 80 44 90 30 104 C36 88 48 76 62 70 Z",
-      };
-      const tailD = art.tail === "short" ? TAIL.short : TAIL.flow;
-      let deco = "";
-      let patches = "";
-      if (art.patches === "koi") {
-        for (let i = 0; i < 4; i++) {
-          const px = 92 + rnd() * 100, py = 38 + rnd() * 38;
-          const prx = 13 + rnd() * 13, pry = 9 + rnd() * 9;
-          patches += `<ellipse cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" rx="${prx.toFixed(1)}" ry="${pry.toFixed(1)}" fill="${i % 2 ? "#e8542e" : "#ef7a3c"}" opacity=".95"/>`;
-        }
-      } else if (art.patches === "soft") {
-        for (let i = 0; i < 3; i++) {
-          const px = 96 + rnd() * 92, py = 42 + rnd() * 30;
-          patches += `<ellipse cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" rx="${(14 + rnd() * 12).toFixed(1)}" ry="${(8 + rnd() * 7).toFixed(1)}" fill="${shade(c2, -18)}" opacity=".2"/>`;
-        }
-      }
-      if (art.dots) {
-        for (let i = 0; i < 9; i++) {
-          const px = 74 + rnd() * 128, py = 52 + rnd() * 16;
-          patches += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(2 + rnd() * 1.6).toFixed(1)}" fill="${shade(c1, -55)}" opacity=".5"/>`;
-        }
-      }
-      let scales = "";
-      if (art.scales) {
-        scales = `<path d="M122 34 C114 50 114 68 124 84 M152 30 C144 50 144 70 154 88 M180 34 C172 50 172 68 182 82" stroke="${shade(c1, -44)}" stroke-width="2" fill="none" opacity=".12"/>`;
-      }
-      let stripes = "";
-      if (art.stripes) {
-        stripes = `<g clip-path="url(#${uid}clip)"><path d="M108 30 C102 52 102 74 110 88 M138 28 C132 52 132 76 140 90 M166 30 C160 52 160 74 168 88 M192 38 C186 52 186 68 194 82" stroke="${shade(c2, -14)}" stroke-width="3.4" fill="none" opacity=".16"/></g>`;
-      }
-      const tailG = art.tail === "double"
-        ? `<g class="cf-tail" style="transform-origin:60px 62px"><path d="M62 48 C44 38 30 22 26 8 C40 26 56 36 68 40 C56 50 54 74 68 82 C56 86 40 96 26 114 C30 96 44 82 62 72 Z" fill="${c2}" opacity=".38" transform="rotate(-13 60 62)"/><path d="M62 48 C44 38 30 22 26 8 C40 26 56 36 68 40 C56 50 54 74 68 82 C56 86 40 96 26 114 C30 96 44 82 62 72 Z" fill="${c2}" opacity=".38" transform="rotate(11 60 62)"/></g>`
-        : `<g class="cf-tail" style="transform-origin:60px 62px"><path d="${tailD}" fill="${c2}" opacity=".55"/></g>`;
-      body = `
-        <g transform="translate(0 62) scale(1 ${h}) translate(0 -62)">
-          ${tailG}
-          ${finTint("M116 30 C126 16 150 12 164 18 C150 21 130 27 120 34 Z")}
-          ${finTint("M98 86 C92 96 84 102 76 102 C82 94 88 88 94 84 Z")}
-          <path d="${BODY}" fill="url(#${uid}g)"/>
-          <g clip-path="url(#${uid}clip)">
-            <ellipse cx="146" cy="34" rx="60" ry="13" fill="#12303c" opacity=".1"/>
-            <ellipse cx="150" cy="84" rx="52" ry="9" fill="#fff" opacity=".16"/>
-            <g filter="url(#${uid}soft)">${patches}</g>
-            ${stripes}
-            ${scales}
-          </g>
-          <path d="M190 42 C180 50 178 66 186 78" stroke="${shade(c1, -46)}" stroke-width="2" fill="none" opacity=".35"/>
-          ${finTint("M178 78 C170 92 156 100 144 99 C154 91 166 83 174 77 Z")}
-          ${eye(202, 52, 5.5)}
-          <path d="M223 66 C219 68 214 68 210 67" stroke="${shade(c1, -60)}" stroke-width="1.4" fill="none" opacity=".55" stroke-linecap="round"/>
-          ${art.whiskers ? whiskers(222, 61) : ""}
-        </g>`;
-      defs += `<clipPath id="${uid}clip"><path d="${BODY}"/></clipPath>`;
-    } else if (art.tpl === "round") {
-      let spikes = "";
-      for (let i = 0; i < 12; i++) {
-        const t = (i / 12) * Math.PI * 2 + 0.26;
-        const x1 = 155 + Math.cos(t) * 54, y1 = 60 + Math.sin(t) * 38;
-        const x2 = 155 + Math.cos(t) * 65, y2 = 60 + Math.sin(t) * 47;
-        if (y2 < 18 || y2 > 104) continue;
-        spikes += `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} L${x2.toFixed(1)} ${y2.toFixed(1)}" stroke="${shade(c1, -55)}" stroke-width="2.2" stroke-linecap="round" opacity=".65"/>`;
-      }
-      let dots = "";
-      for (let i = 0; i < 8; i++) {
-        const px = 116 + rnd() * 76, py = 34 + rnd() * 26;
-        dots += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(3 + rnd() * 2.4).toFixed(1)}" fill="${shade(c1, -52)}" opacity=".42"/>`;
-      }
-      body = `
-        ${spikes}
-        <path d="M212 60 C212 36 190 22 158 22 C124 22 98 38 98 60 C98 82 124 98 158 98 C190 98 212 84 212 60 Z" fill="url(#${uid}g)"/>
-        <g clip-path="url(#${uid}clip)">${dots}<ellipse cx="155" cy="82" rx="40" ry="13" fill="#fff" opacity=".28"/></g>
-        <path d="M102 52 C90 48 80 42 76 34 C84 42 92 48 100 52 C96 56 96 64 100 68 C92 72 84 78 76 86 C80 78 90 72 102 68 Z" fill="${c2}" opacity=".5"/>
-        ${eye(192, 48, 6.4)}
-        <path d="M206 64 C202 66 198 66 194 65" stroke="${shade(c1, -60)}" stroke-width="1.6" fill="none" opacity=".6" stroke-linecap="round"/>`;
-      defs += `<clipPath id="${uid}clip"><ellipse cx="155" cy="60" rx="56" ry="38"/></clipPath>`;
-    } else if (art.tpl === "eel") {
-      defs += `<filter id="${uid}glow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#9fd0e8" flood-opacity=".6"/></filter>`;
-      body = `
-        <g filter="url(#${uid}glow)">
-          <path d="M230 62 C214 50 194 62 170 56 C146 50 130 66 104 60 C80 55 60 66 44 60 C40 58 36 58 34 61 C44 68 62 74 86 76 C116 80 148 76 176 70 C202 65 220 72 230 62 Z" fill="url(#${uid}g)" opacity=".82"/>
-          <path d="M212 50 C192 44 172 52 148 48 C124 44 102 52 80 50" stroke="${shade(c1, 40)}" stroke-width="2.4" fill="none" opacity=".5"/>
-          <path d="M36 61 C26 56 18 58 12 62 C20 65 28 66 36 66 Z" fill="${c2}" opacity=".6"/>
-          ${eye(216, 58, 3.6)}
-        </g>`;
-    } else if (art.tpl === "sprite") {
-      defs += `<radialGradient id="${uid}aura" cx=".5" cy=".45" r=".55">
-        <stop offset="0" stop-color="${c1}" stop-opacity=".85"/>
-        <stop offset="1" stop-color="${c1}" stop-opacity="0"/>
-      </radialGradient>`;
-      body = `
-        <circle cx="120" cy="60" r="46" fill="url(#${uid}aura)" opacity=".6"/>
-        ${spark(74, 42, 7, .85)}${spark(168, 50, 5, .8)}${spark(94, 96, 5, .7)}${spark(152, 92, 6, .75)}
-        <g class="cf-tail" style="transform-origin:106px 74px"><path d="M104 66 C90 72 82 84 84 98 C96 90 108 84 118 80 Z" fill="${shade(c1, -22)}" opacity=".85"/></g>
-        <path d="M120 30 C140 44 144 68 120 90 C96 68 100 44 120 30 Z" fill="url(#${uid}g)" stroke="${shade(c1, -28)}" stroke-width="1.5"/>
-        <path d="M120 40 C131 50 133 66 120 80" stroke="#fff" stroke-width="1.6" opacity=".65" fill="none"/>
-        <circle cx="120" cy="52" r="3.2" fill="#fff" opacity=".95"/>`;
-    }
-
-    return { defs, body };
-  }
-
   function paintCardFish(sp) {
-    const a = fishArtInner(sp, "cf" + sp.id);
+    const c1 = sp.colors[0], c2 = sp.colors[1];
     els.cardFish.setAttribute("viewBox", "0 0 240 120");
     els.cardFish.innerHTML = `
-      <defs>${a.defs}</defs>
-      <ellipse cx="126" cy="104" rx="84" ry="7" fill="#123" opacity=".07"/>
-      <g class="cf-all">${a.body}</g>`;
+      <ellipse cx="122" cy="100" rx="88" ry="8" fill="#123" opacity=".07"/>
+      <g transform="translate(22 16) scale(3.3)">
+        <g class="cf-tail" style="transform-origin:13px 14px">
+          <path d="M13 14 L4 7 L6.5 14 L4 21 Z" fill="${c2}"/>
+        </g>
+        <path d="M50 14 C44 6 32 4 22 8 C16 10 12 12 12 14 C12 16 16 18 22 20 C32 24 44 22 50 14 Z" fill="${c1}"/>
+        <ellipse cx="31" cy="13" rx="7" ry="3.2" fill="${c2}" opacity=".45"/>
+        <circle cx="45" cy="13" r="1.8" fill="#233"/>
+        <circle cx="44.5" cy="12.5" r="0.6" fill="#fff" opacity=".9"/>
+      </g>`;
   }
 
   function showCard(fish) {
