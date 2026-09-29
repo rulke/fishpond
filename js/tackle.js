@@ -9,38 +9,41 @@
   layer.innerHTML = `
     <svg id="tackleSvg" width="100%" height="100%" style="position:absolute;inset:0">
       <defs>
-        <linearGradient id="rodFade" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stop-color="#2c4a58" stop-opacity="0.15"/>
-          <stop offset="30%" stop-color="#3d5a68"/>
-          <stop offset="100%" stop-color="#3d5a68"/>
+        <!-- 入口渐隐：竿根自底坞后探出时淡出，读作延伸到画面外 -->
+        <linearGradient id="rodFade" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#3d5a68" stop-opacity="0"/>
+          <stop offset="16%" stop-color="#3d5a68" stop-opacity="1"/>
+          <stop offset="100%" stop-color="#3d5a68" stop-opacity="1"/>
         </linearGradient>
       </defs>
       <!-- 竿影 -->
       <path id="rodShadow" fill="none" stroke="rgba(40,70,85,.10)" stroke-width="5" stroke-linecap="round"/>
-      <!-- 竿体（墨线） -->
-      <path id="rodPath" fill="none" stroke="url(#rodFade)" stroke-width="2.6" stroke-linecap="round"/>
+      <!-- 竿体：三段锥度，只露画外之竿 -->
+      <path id="rodButt" fill="none" stroke="url(#rodFade)" stroke-width="3.4" stroke-linecap="round"/>
+      <path id="rodMid" fill="none" stroke="url(#rodFade)" stroke-width="2.3" stroke-linecap="round"/>
+      <path id="rodPath" fill="none" stroke="url(#rodFade)" stroke-width="1.4" stroke-linecap="round"/>
       <path id="rodShine" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="0.8" stroke-linecap="round"/>
-      <!-- 短握把：瓷白 -->
-      <path id="rodGrip" fill="none" stroke="#eef5f8" stroke-width="5" stroke-linecap="round"/>
-      <path id="rodGripEdge" fill="none" stroke="rgba(44,74,88,.25)" stroke-width="0.8" stroke-linecap="round"/>
-      <!-- 导环 -->
-      <circle id="guide1" r="2.2" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1"/>
-      <circle id="guide2" r="1.8" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="0.9"/>
-      <!-- 卷线瓷钮 -->
-      <circle id="reelDot" r="3.2" fill="#dceaf0" stroke="rgba(44,74,88,.25)" stroke-width="0.8"/>
+      <!-- 导环：垂直于竿身的细椭圆 -->
+      <ellipse id="guide1" rx="3.2" ry="1.2" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="1"/>
+      <ellipse id="guide2" rx="2.8" ry="1.1" fill="none" stroke="rgba(255,255,255,.62)" stroke-width="0.9"/>
+      <ellipse id="guide3" rx="2.4" ry="1" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="0.85"/>
+      <!-- 竿尖线结 -->
+      <circle id="rodKnot" r="1.8" fill="rgba(255,255,255,.25)" stroke="rgba(255,255,255,.8)" stroke-width="1.1"/>
       <!-- 钓线 -->
       <path id="linePath" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1" stroke-linecap="round"/>
     </svg>`;
 
+  const rodFade = document.getElementById("rodFade");
   const rodPath = document.getElementById("rodPath");
+  const rodButt = document.getElementById("rodButt");
+  const rodMid = document.getElementById("rodMid");
   const rodShine = document.getElementById("rodShine");
-  const rodGrip = document.getElementById("rodGrip");
-  const rodGripEdge = document.getElementById("rodGripEdge");
   const rodShadow = document.getElementById("rodShadow");
+  const rodKnot = document.getElementById("rodKnot");
   const linePath = document.getElementById("linePath");
   const guide1 = document.getElementById("guide1");
   const guide2 = document.getElementById("guide2");
-  const reelDot = document.getElementById("reelDot");
+  const guide3 = document.getElementById("guide3");
 
   let baitSvg = "";
   let visible = false;
@@ -73,9 +76,9 @@
 
   function rodAnchor() {
     const W = innerWidth, H = innerHeight;
-    // 方案 A：竿根藏在坞后，竿尖探入画面中偏右——"执竿坐塘边"的视角
-    const bx = W > 720 ? W * 0.5 + 160 : W * 0.5 + 110;
-    const by = H + 16;
+    // 画外之手：竿根隐在底坞之后，只露从中段到竿尖的一段
+    const bx = W > 720 ? W * 0.5 + 150 : W * 0.5 + 95;
+    const by = H + 8;
     const tx = W > 720 ? W * 0.5 + 60 : W * 0.55;
     const ty = H > 640 ? H * 0.74 : H * 0.76;
     return { bx, by, tx, ty };
@@ -212,9 +215,9 @@
   function tipPosition() {
     const a = rodAnchor();
     const bendPx = bend * 22;
-    // 握把取竿身上靠根部的一点（尖→根 62% 处）
-    const gx = a.tx + (a.bx - a.tx) * 0.62;
-    const gy = a.ty + (a.by - a.ty) * 0.62;
+    // 入口即底缘处：整个可见竿身都是锥度段
+    const gx = a.bx;
+    const gy = a.by;
     return {
       x: a.tx - bendPx * 0.7,
       y: a.ty - bendPx * 0.7,
@@ -350,19 +353,42 @@
     const midX = (tipX + tip.gripX) / 2 + bend * 10;
     const midY = (tipY + tip.gripY) / 2 + bend * 6;
 
-    const rodD = `M${tip.gripX.toFixed(1)} ${tip.gripY.toFixed(1)} Q${midX.toFixed(1)} ${midY.toFixed(1)} ${tipX.toFixed(1)} ${tipY.toFixed(1)}`;
-    rodPath.setAttribute("d", rodD);
-    rodShine.setAttribute("d", rodD);
-    rodShadow.setAttribute("d", `M${(tip.gripX + 3).toFixed(1)} ${(tip.gripY + 5).toFixed(1)} Q${(midX + 3).toFixed(1)} ${(midY + 5).toFixed(1)} ${(tipX + 2).toFixed(1)} ${(tipY + 4).toFixed(1)}`);
-    rodGrip.setAttribute("d", `M${(tip.gripX + 14).toFixed(1)} ${(tip.gripY + 10).toFixed(1)} Q${(tip.gripX + 22).toFixed(1)} ${(tip.gripY + 16).toFixed(1)} ${(tip.gripX + 30).toFixed(1)} ${(tip.gripY + 22).toFixed(1)}`);
-    rodGripEdge.setAttribute("d", rodGrip.getAttribute("d"));
-
-    guide1.setAttribute("cx", (tipX + (tip.gripX - tipX) * 0.3).toFixed(1));
-    guide1.setAttribute("cy", (tipY + (tip.gripY - tipY) * 0.3).toFixed(1));
-    guide2.setAttribute("cx", (tipX + (tip.gripX - tipX) * 0.55).toFixed(1));
-    guide2.setAttribute("cy", (tipY + (tip.gripY - tipY) * 0.55).toFixed(1));
-    reelDot.setAttribute("cx", (tip.gripX + 8).toFixed(1));
-    reelDot.setAttribute("cy", (tip.gripY + 8).toFixed(1));
+    // 二次曲线采点：入口(0) → 竿尖(1)
+    const eX = tip.gripX, eY = tip.gripY;
+    const qAt = (t) => {
+      const u = 1 - t;
+      return [u * u * eX + 2 * u * t * midX + t * t * tipX,
+              u * u * eY + 2 * u * t * midY + t * t * tipY];
+    };
+    const seg = (el, t0, t1) => {
+      const p0 = qAt(t0), pc = qAt((t0 + t1) / 2), p1 = qAt(t1);
+      el.setAttribute("d", `M${p0[0].toFixed(1)} ${p0[1].toFixed(1)} Q${pc[0].toFixed(1)} ${pc[1].toFixed(1)} ${p1[0].toFixed(1)} ${p1[1].toFixed(1)}`);
+    };
+    seg(rodButt, 0, 0.46);
+    seg(rodMid, 0.32, 0.72);
+    seg(rodPath, 0.58, 1);
+    // 入口渐隐方向随竿身
+    rodFade.setAttribute("x1", eX.toFixed(1));
+    rodFade.setAttribute("y1", eY.toFixed(1));
+    rodFade.setAttribute("x2", tipX.toFixed(1));
+    rodFade.setAttribute("y2", tipY.toFixed(1));
+    const sh0 = qAt(0.14);
+    rodShadow.setAttribute("d", `M${(sh0[0] + 3).toFixed(1)} ${(sh0[1] + 5).toFixed(1)} Q${(midX + 3).toFixed(1)} ${(midY + 5).toFixed(1)} ${(tipX + 2).toFixed(1)} ${(tipY + 4).toFixed(1)}`);
+    const up0 = qAt(0), upc = qAt(0.5), up1 = qAt(1);
+    rodShine.setAttribute("d", `M${(up0[0] - 1.2).toFixed(1)} ${(up0[1] - 0.9).toFixed(1)} Q${(upc[0] - 1.2).toFixed(1)} ${(upc[1] - 0.9).toFixed(1)} ${(up1[0] - 1.2).toFixed(1)} ${(up1[1] - 0.9).toFixed(1)}`);
+    // 导环贴竿身、垂直朝向
+    const guideAt = (el, t) => {
+      const p = qAt(t);
+      const ddx = 2 * (1 - t) * (midX - eX) + 2 * t * (tipX - midX);
+      const ddy = 2 * (1 - t) * (midY - eY) + 2 * t * (tipY - midY);
+      const deg = Math.atan2(ddy, ddx) * 180 / Math.PI + 90;
+      el.setAttribute("transform", `translate(${p[0].toFixed(1)} ${p[1].toFixed(1)}) rotate(${deg.toFixed(1)})`);
+    };
+    guideAt(guide1, 0.42);
+    guideAt(guide2, 0.66);
+    guideAt(guide3, 0.88);
+    rodKnot.setAttribute("cx", tipX.toFixed(1));
+    rodKnot.setAttribute("cy", tipY.toFixed(1));
 
     const showLine = visible || anim || phase === "fight";
     if (showLine) {

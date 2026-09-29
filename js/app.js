@@ -190,31 +190,21 @@
       return;
     }
     const sweet = inSweet(aim.pow);
-    // 全屏任选落点：待机只有幽灵圈，按住才有预览漂；亮带=绕竿尖的距离环
     const mode = aiming ? "aim" : "idle";
     const key = [mode, aim.x.toFixed(1), aim.y.toFixed(1), sweet ? 1 : 0].join("|");
     if (!force && key === fanKey) return;
     fanKey = key;
 
-    const { rx, ry, maxD } = aim;
-    const s0 = sweetStart, s1 = sweetStart + SWEET_W;
-    const r0 = s0 * maxD, r1 = s1 * maxD;
-    const rMid = (r0 + r1) / 2;
-    // 距离甜区：绕竿尖一圈的亮带（方向不限）
-    const band = (fill, edge) => `
-      <circle cx="${rx.toFixed(1)}" cy="${ry.toFixed(1)}" r="${rMid.toFixed(1)}" fill="none"
-        stroke="rgba(159,208,220,${fill})" stroke-width="${(r1 - r0).toFixed(1)}"/>
-      <circle cx="${rx.toFixed(1)}" cy="${ry.toFixed(1)}" r="${r0.toFixed(1)}" fill="none"
-        stroke="rgba(255,255,255,${edge})" stroke-width="1"/>
-      <circle cx="${rx.toFixed(1)}" cy="${ry.toFixed(1)}" r="${r1.toFixed(1)}" fill="none"
-        stroke="rgba(255,255,255,${edge})" stroke-width="1"/>`;
     const [xt, yt] = [aim.x, aim.y];
+    // 待机：只有幽灵圈（漂浮在水面时连它也免了）
     const ghost = `
       <circle cx="${xt.toFixed(1)}" cy="${yt.toFixed(1)}" r="14" fill="none"
         stroke="rgba(44,74,88,.55)" stroke-width="1.4" stroke-dasharray="5 5"/>
       <circle cx="${xt.toFixed(1)}" cy="${yt.toFixed(1)}" r="2.8" fill="rgba(44,74,88,.55)"/>`;
+    // 瞄准：预览漂；落在甜区它自己泛光微沉，就是"顺手一抛"
     const preview = `
       <g class="pv-bob${sweet ? " sweet" : ""}" transform="translate(${xt.toFixed(1)} ${yt.toFixed(1)})${sweet ? " translate(0 2)" : ""}">
+        ${sweet ? '<circle cx="0" cy="2" r="15" fill="none" stroke="rgba(159,208,220,.55)" stroke-width="5" opacity=".65"/>' : ""}
         <ellipse cx="0" cy="10" rx="9" ry="2.6" fill="rgba(255,255,255,.28)"/>
         <rect x="-2.6" y="-13" width="5.2" height="6" rx="2.6" fill="#e88a9a"/>
         <rect x="-4.6" y="-7.6" width="9.2" height="12" rx="4" fill="#fbfdfe" stroke="rgba(120,160,180,.55)" stroke-width="1"/>
@@ -222,11 +212,10 @@
       </g>`;
 
     if (mode === "idle") {
-      // 漂还浮在水面（脱钩后）就不画幽灵圈，真漂即是位置
-      els.aimFan.innerHTML = band(0.12, 0.22) + (Tackle.floating ? "" : ghost);
+      els.aimFan.innerHTML = Tackle.floating ? "" : ghost;
       return;
     }
-    els.aimFan.innerHTML = band(0.28, 0.45) + preview;
+    els.aimFan.innerHTML = preview;
   }
 
   function startAim(x, y) {
@@ -310,7 +299,9 @@
       if (window.Tackle) {
         // 分镜落点必须用钳制后的真实落点；漂在水面时从原位直接甩往新钓点
         const lx = Fishing.st.lineX, ly = Fishing.st.lineY;
-        const fromPt = Tackle.floating ? Tackle.floatPos() : { x: Fishing.st.rodX, y: Fishing.st.rodY };
+        const fromPt = Tackle.floating
+          ? { x: Tackle.floatPos.x, y: Tackle.floatPos.y }
+          : { x: Fishing.st.rodX, y: Fishing.st.rodY };
         Tackle.startFlight(fromPt, {
           x: lx, y: ly, dist: Math.hypot(lx - fromPt.x, ly - fromPt.y),
         });
